@@ -30,11 +30,12 @@ COPY deploy/update-panel.sh /usr/local/bin/update-panel
 RUN chmod +x /usr/local/bin/update-panel
 
 ENV PANEL_PORT=8080 \
-    PANEL_VERSION=1.1.0 \
+    PANEL_VERSION=1.1.1 \
     PANEL_REPO=sllikmll/amnezia-panel \
     PANEL_IMAGE=ghcr.io/sllikmll/amnezia-panel:latest \
     PANEL_CONTAINER_NAME=awg-panel \
     PANEL_UPDATE_COMMAND=/usr/local/bin/update-panel \
+    PANEL_HOST_DATA_DIR=/data \
     AWG_DATA_DIR=/data \
     AWG_DB_PATH=/data/panel.db \
     AWG_CONFIG_PATH=/data/awg0.conf

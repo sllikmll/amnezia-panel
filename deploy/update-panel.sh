@@ -4,7 +4,7 @@ set -eu
 IMAGE="${PANEL_IMAGE:-ghcr.io/sllikmll/amnezia-panel:latest}"
 NAME="${PANEL_CONTAINER_NAME:-awg-panel}"
 PORT="${PANEL_PORT:-8888}"
-DATA_DIR="${AWG_DATA_DIR:-/data/awg}"
+HOST_DATA_DIR="${PANEL_HOST_DATA_DIR:-${AWG_DATA_DIR:-/data/awg}}"
 ENDPOINT="${AWG_ENDPOINT:-vpn.example.com:51820}"
 DB_PATH="${AWG_DB_PATH:-/data/panel.db}"
 CONFIG_PATH="${AWG_CONFIG_PATH:-/data/awg0.conf}"
@@ -28,7 +28,7 @@ docker run -d \
   --restart "$RESTART_POLICY" \
   --network host \
   --cap-add NET_ADMIN \
-  -v "$DATA_DIR:/data" \
+  -v "$HOST_DATA_DIR:/data" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e PANEL_ADMIN_USER="${PANEL_ADMIN_USER:-admin}" \
   -e PANEL_ADMIN_PASSWORD="${PANEL_ADMIN_PASSWORD:-}" \
@@ -40,6 +40,7 @@ docker run -d \
   -e PANEL_IMAGE="$IMAGE" \
   -e PANEL_CONTAINER_NAME="$NAME" \
   -e PANEL_UPDATE_COMMAND="/usr/local/bin/update-panel" \
+  -e PANEL_HOST_DATA_DIR="$HOST_DATA_DIR" \
   -e AWG_DATA_DIR=/data \
   -e AWG_DB_PATH="$DB_PATH" \
   -e AWG_CONFIG_PATH="$CONFIG_PATH" \
