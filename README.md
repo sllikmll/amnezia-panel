@@ -4,7 +4,7 @@
 
 Веб-панель для тестового управления AmneziaWG/WireGuard-подобным VPN-контуром: локальный `awg-tunnel`, peer CRUD, QR/конфиги клиентов, traffic accounting, уведомления, WebSocket live-события и multi-server управление через SSH.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
@@ -163,6 +163,33 @@ docker build -t ghcr.io/sllikmll/amnezia-panel:latest .
 | `AWG_LISTEN_PORT` | UDP listen port | `51820` |
 
 ---
+
+## Самообновление
+
+Панель умеет проверять GitHub Releases при входе администратора:
+
+- backend endpoint `GET /api/update/check` сравнивает `PANEL_VERSION` с latest release в `PANEL_REPO`;
+- если latest release новее текущей версии, UI показывает баннер обновления;
+- кнопка **Обновить** вызывает `POST /api/update/apply`;
+- backend запускает фиксированный update-script `PANEL_UPDATE_COMMAND` без передачи произвольных команд из браузера;
+- стандартный Docker script `/usr/local/bin/update-panel` делает `docker pull`, пересоздаёт контейнер `PANEL_CONTAINER_NAME` и стартует новый image.
+
+Переменные:
+
+| Переменная | Default | Назначение |
+|---|---|---|
+| `PANEL_VERSION` | `1.1.0` | текущая версия приложения |
+| `PANEL_REPO` | `sllikmll/amnezia-panel` | GitHub repo для latest release check |
+| `PANEL_IMAGE` | `ghcr.io/sllikmll/amnezia-panel:latest` | Docker image, который тянет updater |
+| `PANEL_CONTAINER_NAME` | `awg-panel` | имя контейнера панели |
+| `PANEL_UPDATE_COMMAND` | `/usr/local/bin/update-panel` | фиксированная команда самообновления |
+
+Для работы updater нужен mount Docker socket:
+
+```yaml
+- /var/run/docker.sock:/var/run/docker.sock
+```
+
 
 ## API
 

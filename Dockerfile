@@ -24,10 +24,17 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 
-COPY backend/main.py backend/multi_server.py backend/crypto.py backend/aggregate.py backend/discover.py backend/notify.py backend/realtime.py ./
+COPY backend/main.py backend/multi_server.py backend/crypto.py backend/aggregate.py backend/discover.py backend/notify.py backend/realtime.py backend/update_utils.py ./
 COPY frontend/index.html /app/static/index.html
+COPY deploy/update-panel.sh /usr/local/bin/update-panel
+RUN chmod +x /usr/local/bin/update-panel
 
 ENV PANEL_PORT=8080 \
+    PANEL_VERSION=1.1.0 \
+    PANEL_REPO=sllikmll/amnezia-panel \
+    PANEL_IMAGE=ghcr.io/sllikmll/amnezia-panel:latest \
+    PANEL_CONTAINER_NAME=awg-panel \
+    PANEL_UPDATE_COMMAND=/usr/local/bin/update-panel \
     AWG_DATA_DIR=/data \
     AWG_DB_PATH=/data/panel.db \
     AWG_CONFIG_PATH=/data/awg0.conf

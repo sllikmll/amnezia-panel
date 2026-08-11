@@ -4,74 +4,102 @@
 <meta charset="UTF-8">
 <title>AmneziaWG Panel</title>
 <style>
+  :root {
+    --bg: #07111f;
+    --bg2: #0b1728;
+    --panel: rgba(15, 27, 46, 0.88);
+    --panel-solid: #101b2d;
+    --card: rgba(17, 31, 52, 0.92);
+    --card-hover: rgba(24, 42, 68, 0.96);
+    --border: rgba(125, 211, 252, 0.14);
+    --border-strong: rgba(45, 212, 191, 0.36);
+    --text: #e5f2ff;
+    --muted: #8aa4bf;
+    --muted2: #60758b;
+    --accent: #22d3ee;
+    --accent2: #34d399;
+    --accent3: #60a5fa;
+    --danger: #fb7185;
+    --warning: #fbbf24;
+    --shadow: 0 24px 70px rgba(0,0,0,.38);
+    --radius: 16px;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-         background: #0f1923; color: #e0e6ed; padding: 20px; }
-  .container { max-width: 1200px; margin: 0 auto; }
-  h1 { color: #4ade80; margin-bottom: 20px; font-size: 24px; }
-  h2 { color: #4ade80; margin-bottom: 15px; font-size: 18px; }
-  .login-form { max-width: 320px; margin: 100px auto; background: #1a2a3a;
-                padding: 30px; border-radius: 10px; }
-  .login-form h2 { margin-bottom: 20px; }
-  input, select { width: 100%; padding: 10px; margin: 5px 0 15px; border: 1px solid #2a3a4a;
-          background: #0f1923; color: #e0e6ed; border-radius: 5px; }
-  button { background: #4ade80; color: #0f1923; padding: 10px 20px; border: none;
-           border-radius: 5px; cursor: pointer; font-weight: bold; margin-right: 5px; }
-  button:hover { background: #36c46c; }
-  button.secondary { background: #4a5a6a; color: #e0e6ed; }
-  button.danger { background: #f87171; }
-  button:disabled { background: #555; color: #888; cursor: not-allowed; }
-  table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1a2a3a;
-          border-radius: 5px; overflow: hidden; }
-  th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #2a3a4a; }
-  th { background: #2a3a4a; color: #4ade80; font-size: 12px; text-transform: uppercase; }
-  tr:hover { background: #2a3a4a; }
-  .status-on { color: #4ade80; }
-  .status-off { color: #f87171; }
-  .status-online { color: #4ade80; }
-  .status-offline { color: #888; }
-  .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-           background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
+  body {
+    min-height: 100vh;
+    font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at 8% 0%, rgba(34, 211, 238, .18), transparent 30%),
+      radial-gradient(circle at 88% 12%, rgba(52, 211, 153, .14), transparent 32%),
+      linear-gradient(135deg, var(--bg), var(--bg2) 48%, #08101c);
+    color: var(--text);
+    padding: 24px;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+    background-size: 42px 42px; mask-image: linear-gradient(to bottom, rgba(0,0,0,.75), transparent 80%);
+  }
+  .container { max-width: 1280px; margin: 0 auto; position: relative; z-index: 1; }
+  h1 { color: var(--text); margin-bottom: 0; font-size: 25px; letter-spacing: -.02em; }
+  h1::after { content: ""; display: block; width: 88px; height: 3px; margin-top: 10px; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  h2 { color: var(--text); margin-bottom: 16px; font-size: 18px; letter-spacing: -.01em; }
+  .login-form { max-width: 380px; margin: 95px auto; background: linear-gradient(180deg, rgba(17,31,52,.96), rgba(10,20,35,.94)); padding: 30px; border-radius: 22px; border: 1px solid var(--border); box-shadow: var(--shadow); backdrop-filter: blur(18px); }
+  .login-form h2 { margin-bottom: 22px; color: var(--text); }
+  input, select { width: 100%; padding: 11px 12px; margin: 5px 0 15px; border: 1px solid var(--border); background: rgba(5, 13, 25, .78); color: var(--text); border-radius: 12px; outline: none; transition: border-color .18s ease, box-shadow .18s ease, background .18s ease; }
+  input:focus, select:focus { border-color: var(--border-strong); box-shadow: 0 0 0 3px rgba(34,211,238,.12); background: rgba(8, 19, 34, .95); }
+  button { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #04111f; padding: 10px 18px; border: 0; border-radius: 12px; cursor: pointer; font-weight: 800; margin-right: 6px; box-shadow: 0 10px 28px rgba(34,211,238,.15); transition: transform .16s ease, filter .16s ease, opacity .16s ease; }
+  button:hover { transform: translateY(-1px); filter: brightness(1.06); }
+  button.secondary { background: rgba(23, 38, 61, .96); color: var(--text); border: 1px solid var(--border); box-shadow: none; }
+  button.danger { background: linear-gradient(135deg, #fb7185, #f43f5e); color: #fff; }
+  button.warning { background: linear-gradient(135deg, #fbbf24, #22d3ee); color: #06111f; }
+  button:disabled { background: #263447; color: var(--muted2); cursor: not-allowed; transform: none; box-shadow: none; }
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: 0 16px 45px rgba(0,0,0,.18); }
+  th, td { padding: 13px 15px; text-align: left; border-bottom: 1px solid rgba(125,211,252,.09); }
+  th { background: rgba(18, 35, 59, .98); color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  tr:hover { background: rgba(34,211,238,.045); }
+  .status-on, .status-online { color: var(--accent2); }
+  .status-off, .status-offline { color: var(--danger); }
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(8px); }
   .modal.active { display: flex; }
-  .modal-content { background: #1a2a3a; padding: 30px; border-radius: 10px;
-                   max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
-  .config-box { background: #0f1923; padding: 15px; border-radius: 5px; font-family: monospace;
-                font-size: 12px; max-height: 200px; overflow: auto; white-space: pre-wrap;
-                word-break: break-all; width: 100%; border: none; color: #e0e6ed; }
-  .qr-img { max-width: 256px; margin: 15px auto; display: block; background: white;
-            padding: 10px; border-radius: 5px; }
-  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .modal-content { background: linear-gradient(180deg, rgba(17,31,52,.98), rgba(9,18,32,.98)); padding: 30px; border-radius: 22px; border: 1px solid var(--border); box-shadow: var(--shadow); max-width: 680px; width: 92%; max-height: 90vh; overflow-y: auto; }
+  .config-box { background: rgba(5, 13, 25, .92); padding: 15px; border-radius: 12px; font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; width: 100%; border: 1px solid var(--border); color: var(--text); }
+  .qr-img { max-width: 256px; margin: 15px auto; display: block; background: white; padding: 10px; border-radius: 14px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding: 18px 20px; background: rgba(7,17,31,.62); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 18px 50px rgba(0,0,0,.18); backdrop-filter: blur(16px); }
   .form-group { margin: 15px 0; }
-  .form-group label { display: block; margin-bottom: 5px; color: #4ade80; font-size: 13px; }
-  .error { color: #f87171; margin-top: 10px; }
-  .tabs { display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 1px solid #2a3a4a; }
-  .tab { padding: 10px 20px; cursor: pointer; border-radius: 5px 5px 0 0;
-         background: #1a2a3a; color: #888; border: 1px solid #2a3a4a; border-bottom: none; }
-  .tab.active { background: #2a3a4a; color: #4ade80; }
+  .form-group label { display: block; margin-bottom: 6px; color: var(--accent); font-size: 13px; font-weight: 700; }
+  .error { color: var(--danger); margin-top: 10px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; padding: 6px; background: rgba(7,17,31,.58); border: 1px solid var(--border); border-radius: 18px; }
+  .tab { padding: 11px 16px; cursor: pointer; border-radius: 13px; background: transparent; color: var(--muted); border: 1px solid transparent; transition: all .16s ease; }
+  .tab:hover { color: var(--text); background: rgba(34,211,238,.07); }
+  .tab.active { background: linear-gradient(135deg, rgba(34,211,238,.16), rgba(52,211,153,.12)); color: var(--text); border-color: var(--border-strong); box-shadow: inset 0 0 0 1px rgba(255,255,255,.03); }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
-  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-                gap: 15px; margin-bottom: 20px; }
-  .stat-card { background: #1a2a3a; padding: 20px; border-radius: 10px;
-               border-left: 3px solid #4ade80; }
-  .stat-card .label { color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; }
-  .stat-card .value { color: #4ade80; font-size: 22px; font-weight: bold; }
-  .stat-card .sub { color: #888; font-size: 12px; margin-top: 5px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
+  .stat-card { background: var(--card); padding: 20px; border-radius: var(--radius); border: 1px solid var(--border); border-left: 3px solid var(--accent); box-shadow: 0 14px 35px rgba(0,0,0,.16); }
+  .stat-card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+  .stat-card .value { color: var(--accent2); font-size: 23px; font-weight: 900; }
+  .stat-card .sub { color: var(--muted); font-size: 12px; margin-top: 5px; }
   .peer-selector { display: flex; gap: 10px; margin-bottom: 20px; align-items: end; }
   .peer-selector .form-group { flex: 1; margin: 0; }
-  .traffic-bar { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
-  .traffic-bar .month { width: 80px; color: #888; }
-  .traffic-bar .bar { flex: 1; height: 24px; background: #2a3a4a; border-radius: 3px; overflow: hidden; position: relative; }
-  .traffic-bar .bar-fill { height: 100%; background: linear-gradient(90deg, #4ade80, #36c46c); }
-  .traffic-bar .value { color: #e0e6ed; font-size: 13px; min-width: 100px; text-align: right; }
-  .empty { text-align: center; padding: 40px; color: #888; }
-  .event-handshake { color: #4ade80; }
-  .event-disconnect { color: #f87171; }
-  code { background: #0f1923; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
-  .badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: bold; }
-  .badge-success { background: #1a3a1a; color: #4ade80; }
-  .badge-muted { background: #2a3a4a; color: #888; }
-  .summary-actions { display: flex; gap: 10px; margin-bottom: 20px; }
+  .traffic-bar { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+  .traffic-bar .month { width: 80px; color: var(--muted); }
+  .traffic-bar .bar { flex: 1; height: 24px; background: rgba(5,13,25,.76); border-radius: 99px; overflow: hidden; position: relative; border: 1px solid var(--border); }
+  .traffic-bar .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .traffic-bar .value { color: var(--text); font-size: 13px; min-width: 100px; text-align: right; }
+  .empty { text-align: center; padding: 42px; color: var(--muted); }
+  .event-handshake { color: var(--accent2); }
+  .event-disconnect { color: var(--danger); }
+  code { background: rgba(5,13,25,.8); padding: 3px 7px; border-radius: 8px; font-size: 12px; border: 1px solid rgba(125,211,252,.1); }
+  .badge { display: inline-block; padding: 4px 9px; border-radius: 99px; font-size: 11px; font-weight: 800; }
+  .badge-success { background: rgba(52,211,153,.13); color: var(--accent2); border: 1px solid rgba(52,211,153,.24); }
+  .badge-muted { background: rgba(96,117,139,.14); color: var(--muted); border: 1px solid rgba(96,117,139,.2); }
+  .summary-actions { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
+  .update-banner { display: none; margin: 0 0 18px; padding: 16px 18px; border: 1px solid rgba(251,191,36,.34); border-radius: 18px; background: linear-gradient(135deg, rgba(251,191,36,.14), rgba(34,211,238,.08)); box-shadow: 0 16px 42px rgba(0,0,0,.18); }
+  .update-banner.active { display: flex; gap: 14px; justify-content: space-between; align-items: center; }
+  .update-banner .title { font-weight: 900; color: var(--text); margin-bottom: 4px; }
+  .update-banner .meta { color: var(--muted); font-size: 13px; }
+  .update-banner .actions { white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -91,6 +119,17 @@
         <span id="user-info" style="margin-right: 15px; color: #888;"></span>
           <span id="ws-status" style="margin-right: 15px; color: #888;">○ offline</span>
         <button class="secondary" onclick="logout()">Выход</button>
+      </div>
+    </div>
+
+    <div id="update-banner" class="update-banner">
+      <div>
+        <div class="title">🚀 Доступно обновление панели</div>
+        <div id="update-meta" class="meta">Проверяю релиз...</div>
+      </div>
+      <div class="actions">
+        <button id="update-btn" class="warning" onclick="applyUpdate()">Обновить</button>
+        <button class="secondary" onclick="hideUpdateBanner()">Скрыть</button>
       </div>
     </div>
 
@@ -395,6 +434,8 @@ let token = localStorage.getItem('token');
 let currentConfig = '';
 let currentPeers = [];
 let ws = null;
+let updateCheck = null;
+let updatePollTimer = null;
 
 function connectWS() {
   if (ws) ws.close();
@@ -462,6 +503,86 @@ async function api(path, opts = {}) {
   return r.json();
 }
 
+
+function hideUpdateBanner() {
+  const banner = document.getElementById('update-banner');
+  if (banner) banner.classList.remove('active');
+}
+
+function setUpdateBanner(text, active = true) {
+  const banner = document.getElementById('update-banner');
+  const meta = document.getElementById('update-meta');
+  if (!banner || !meta) return;
+  meta.textContent = text;
+  banner.classList.toggle('active', active);
+}
+
+async function checkForUpdate() {
+  try {
+    const data = await api('/update/check');
+    updateCheck = data;
+    if (data.update_available) {
+      const current = data.current_version || 'unknown';
+      const latest = data.latest_version || data.tag_name || 'latest';
+      setUpdateBanner(`Текущая версия ${current}, в репозитории ${latest}. Можно обновиться прямо отсюда.`);
+    } else if (data.error) {
+      console.warn('[update] check failed:', data.error);
+      hideUpdateBanner();
+    } else {
+      hideUpdateBanner();
+    }
+  } catch (e) {
+    console.warn('[update] check:', e.message);
+  }
+}
+
+async function applyUpdate() {
+  const btn = document.getElementById('update-btn');
+  if (!confirm('Обновить панель до последнего релиза? Контейнер перезапустится.')) return;
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = 'Обновляю...'; }
+    setUpdateBanner('Запускаю самообновление: pull image и recreate контейнера...');
+    const res = await api('/update/apply', { method: 'POST' });
+    if (!res.started) {
+      setUpdateBanner(res.message || 'Обновление не требуется', false);
+      return;
+    }
+    pollUpdateStatus();
+  } catch (e) {
+    setUpdateBanner('Ошибка запуска обновления: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Обновить'; }
+  }
+}
+
+async function pollUpdateStatus() {
+  clearInterval(updatePollTimer);
+  updatePollTimer = setInterval(async () => {
+    try {
+      const data = await api('/update/status');
+      const st = data.state || {};
+      if (st.running || st.status === 'running') {
+        setUpdateBanner(`Обновление выполняется до ${st.target_version || 'latest'}...`);
+        return;
+      }
+      clearInterval(updatePollTimer);
+      if (st.status === 'completed') {
+        setUpdateBanner('Обновление применено. Перезагружаю интерфейс...');
+        setTimeout(() => location.reload(), 2500);
+      } else if (st.status === 'failed') {
+        const btn = document.getElementById('update-btn');
+        if (btn) { btn.disabled = false; btn.textContent = 'Обновить'; }
+        setUpdateBanner('Обновление не применилось: ' + (st.log || 'unknown error').slice(0, 500));
+      }
+    } catch (e) {
+      // During container restart the request can fail; retry a few seconds later.
+      setUpdateBanner('Контейнер перезапускается, жду возвращения панели...');
+      fetch('/', { cache: 'no-store' }).then(r => {
+        if (r.ok) setTimeout(() => location.reload(), 1500);
+      }).catch(() => {});
+    }
+  }, 2500);
+}
+
 async function login() {
   const u = document.getElementById('username').value;
   const p = document.getElementById('password').value;
@@ -502,6 +623,7 @@ function showMain() {
   try { loadPeers(); } catch(e) { console.error('loadPeers:', e); }
   try { loadDashboard(); } catch(e) { console.error('loadDashboard:', e); }
   try { updateLastCollect(); } catch(e) { console.error('updateLastCollect:', e); }
+  try { checkForUpdate(); } catch(e) { console.error('checkForUpdate:', e); }
 }
 
 function switchTab(tab) {

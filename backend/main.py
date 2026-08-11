@@ -31,6 +31,7 @@ import bcrypt
 import qrcode
 import io
 import base64
+import requests
 
 from multi_server import (
     from_server_row,
@@ -46,6 +47,7 @@ import aggregate
 import discover
 import notify
 import realtime
+from update_utils import is_newer_version
 from fastapi import WebSocket, WebSocketDisconnect
 
 # ─── Config ────────────────────────────────────────────────────────────
@@ -56,6 +58,12 @@ SECRET_KEY = os.getenv("PANEL_SECRET_KEY", secrets.token_urlsafe(32))
 JWT_ALG = "HS256"
 JWT_HOURS = 24
 TRAFFIC_COLLECT_INTERVAL = int(os.getenv("TRAFFIC_INTERVAL", "300"))  # 5 минут
+APP_VERSION = os.getenv("PANEL_VERSION", "1.1.0").lstrip("v")
+PANEL_REPO = os.getenv("PANEL_REPO", "sllikmll/amnezia-panel")
+PANEL_IMAGE = os.getenv("PANEL_IMAGE", "ghcr.io/sllikmll/amnezia-panel:latest")
+PANEL_UPDATE_COMMAND = os.getenv("PANEL_UPDATE_COMMAND", "/usr/local/bin/update-panel")
+PANEL_UPDATE_TIMEOUT = int(os.getenv("PANEL_UPDATE_TIMEOUT", "1800"))
+UPDATE_STATE = {"running": False, "status": "idle", "started_at": None, "finished_at": None, "target_version": None, "log": ""}
 
 # ─── DB ────────────────────────────────────────────────────────────────
 def init_db():
@@ -689,7 +697,7 @@ async def lifespan(app: FastAPI):
     t2.start()
     yield
 
-app = FastAPI(title="AmneziaWG Panel", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="AmneziaWG Panel", version=APP_VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -697,7 +705,113 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ─── Self-update helpers ───────────────────────────────────────────────
+def _github_latest_release() -> dict:
+    url = f"https://api.github.com/repos/{PANEL_REPO}/releases/latest"
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "amnezia-panel-updater"}
+    r = requests.get(url, headers=headers, timeout=8)
+    if r.status_code == 404:
+        return {"available": False, "error": "latest release not found", "repo": PANEL_REPO}
+    r.raise_for_status()
+    data = r.json()
+    latest = (data.get("tag_name") or "").lstrip("v")
+    return {
+        "available": bool(latest),
+        "repo": PANEL_REPO,
+        "current_version": APP_VERSION,
+        "latest_version": latest,
+        "tag_name": data.get("tag_name"),
+        "name": data.get("name"),
+        "html_url": data.get("html_url"),
+        "published_at": data.get("published_at"),
+        "body": data.get("body") or "",
+        "update_available": is_newer_version(latest, APP_VERSION),
+        "image": PANEL_IMAGE,
+    }
+
+
+def _run_update_command(target_version: str):
+    UPDATE_STATE.update({
+        "running": True,
+        "status": "running",
+        "started_at": datetime.utcnow().isoformat() + "Z",
+        "finished_at": None,
+        "target_version": target_version,
+        "log": "",
+    })
+    try:
+        cmd = [PANEL_UPDATE_COMMAND]
+        if not Path(PANEL_UPDATE_COMMAND).exists():
+            raise RuntimeError(f"Update command not found: {PANEL_UPDATE_COMMAND}")
+        env = os.environ.copy()
+        env.update({
+            "PANEL_TARGET_VERSION": target_version,
+            "PANEL_IMAGE": PANEL_IMAGE,
+            "PANEL_CONTAINER_NAME": env.get("PANEL_CONTAINER_NAME", "awg-panel"),
+        })
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=PANEL_UPDATE_TIMEOUT,
+            env=env,
+            check=False,
+        )
+        output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        UPDATE_STATE["log"] = output[-12000:]
+        if proc.returncode == 0:
+            UPDATE_STATE["status"] = "completed"
+        else:
+            UPDATE_STATE["status"] = "failed"
+            UPDATE_STATE["returncode"] = proc.returncode
+    except Exception as e:
+        UPDATE_STATE["status"] = "failed"
+        UPDATE_STATE["log"] = str(e)
+    finally:
+        UPDATE_STATE["running"] = False
+        UPDATE_STATE["finished_at"] = datetime.utcnow().isoformat() + "Z"
+
 # ─── Routes ────────────────────────────────────────────────────────────
+
+@app.get("/api/update/check")
+def update_check(_: str = Depends(verify_token)):
+    """Compare current app version with latest GitHub release."""
+    try:
+        data = _github_latest_release()
+        data["state"] = UPDATE_STATE
+        return data
+    except requests.RequestException as e:
+        return {
+            "available": False,
+            "repo": PANEL_REPO,
+            "current_version": APP_VERSION,
+            "latest_version": None,
+            "update_available": False,
+            "error": str(e),
+            "state": UPDATE_STATE,
+        }
+
+
+@app.post("/api/update/apply")
+def update_apply(user: str = Depends(verify_token)):
+    """Start self-update in background. The command is fixed by env/script, not user input."""
+    if UPDATE_STATE.get("running"):
+        raise HTTPException(409, "Update already running")
+    data = _github_latest_release()
+    if not data.get("update_available"):
+        return {"started": False, "message": "Already up to date", "release": data, "state": UPDATE_STATE}
+    target = data.get("latest_version") or data.get("tag_name") or "latest"
+    t = threading.Thread(target=_run_update_command, args=(target,), daemon=True)
+    t.start()
+    _write_audit(user, "self_update_start", target, json.dumps({"repo": PANEL_REPO, "image": PANEL_IMAGE}))
+    return {"started": True, "target_version": target, "state": UPDATE_STATE}
+
+
+@app.get("/api/update/status")
+def update_status(_: str = Depends(verify_token)):
+    return {"state": UPDATE_STATE, "current_version": APP_VERSION, "image": PANEL_IMAGE, "repo": PANEL_REPO}
+
 @app.post("/api/login")
 def login(req: LoginRequest):
     conn = get_db()

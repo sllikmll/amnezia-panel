@@ -32,6 +32,11 @@ services:
       PANEL_ADMIN_PASSWORD: ${PANEL_ADMIN_PASSWORD:?set PANEL_ADMIN_PASSWORD in deploy/.env}
       PANEL_SECRET_KEY: ${PANEL_SECRET_KEY:?set PANEL_SECRET_KEY in deploy/.env}
       PANEL_ENCRYPTION_KEY: ${PANEL_ENCRYPTION_KEY:-}
+      PANEL_VERSION: ${PANEL_VERSION:-1.1.0}
+      PANEL_REPO: ${PANEL_REPO:-sllikmll/amnezia-panel}
+      PANEL_IMAGE: ${PANEL_IMAGE:-ghcr.io/sllikmll/amnezia-panel:latest}
+      PANEL_CONTAINER_NAME: awg-panel
+      PANEL_UPDATE_COMMAND: /usr/local/bin/update-panel
       AWG_CONFIG_PATH: ${AWG_CONFIG_PATH:-/data/awg0.conf}
       AWG_ENDPOINT: ${AWG_ENDPOINT:-vpn.example.com:51820}
       AWG_LISTEN_PORT: ${AWG_LISTEN_PORT:-51820}
