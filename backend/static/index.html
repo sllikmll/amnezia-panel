@@ -117,7 +117,7 @@
       <h1>🛡️ AmneziaWG — Управление</h1>
       <div>
         <span id="user-info" style="margin-right: 15px; color: #888;"></span>
-          <span id="ws-status" style="margin-right: 15px; color: #888;">○ offline</span>
+          <span id="health-status" style="margin-right: 15px; color: #888;">○ AWG checking…</span>
         <button class="secondary" onclick="logout()">Выход</button>
       </div>
     </div>
@@ -436,13 +436,13 @@ let currentPeers = [];
 let ws = null;
 let updateCheck = null;
 let updatePollTimer = null;
+let healthPollTimer = null;
 
 function connectWS() {
   if (ws) ws.close();
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(proto + '://' + location.host + '/ws');
   ws.onopen = () => {
-    document.getElementById('ws-status').innerHTML = '<span style="color:#4ade80;">● live</span>';
     ws.send(JSON.stringify({action: 'ping'}));
   };
   ws.onmessage = (e) => {
@@ -452,7 +452,6 @@ function connectWS() {
     } catch (err) { console.error('WS parse:', err); }
   };
   ws.onclose = () => {
-    document.getElementById('ws-status').innerHTML = '<span style="color:#888;">○ offline</span>';
     setTimeout(connectWS, 3000);
   };
   ws.onerror = () => ws.close();
@@ -488,9 +487,30 @@ function flashNotification(msg) {
 if (token) {
   console.log('[init] token found, skipping login');
   showMain();
-  connectWS();
 } else {
   console.log('[init] no token, showing login form');
+}
+
+
+async function updateAwgHealth() {
+  const el = document.getElementById('health-status');
+  if (!el || !token) return;
+  try {
+    const h = await api('/local/health');
+    const containerOk = h.container_status === 'running';
+    const awgOk = h.awg_status === 'running';
+    if (containerOk && awgOk && h.ok) {
+      const port = h.listen_port ? `:${h.listen_port}` : '';
+      el.innerHTML = `<span style="color:#22c55e;">● AWG online${port}</span>`;
+      el.title = `container=${h.container_status}, awg=${h.awg_status}, peers=${h.peer_count || 0}`;
+    } else {
+      el.innerHTML = '<span style="color:#f97316;">○ AWG offline</span>';
+      el.title = `container=${h.container_status || 'unknown'}, awg=${h.awg_status || 'unknown'}${h.error ? ', error=' + h.error : ''}`;
+    }
+  } catch (e) {
+    el.innerHTML = '<span style="color:#ef4444;">○ AWG offline</span>';
+    el.title = e.message || 'health check failed';
+  }
 }
 
 async function api(path, opts = {}) {
@@ -612,7 +632,8 @@ function logout() {
   localStorage.removeItem('token');
   token = null;
   if (ws) { try { ws.close(); } catch(e) {} ws = null; }
-  document.getElementById('ws-status').innerHTML = '<span style="color:#888;">○ offline</span>';
+  if (healthPollTimer) { clearInterval(healthPollTimer); healthPollTimer = null; }
+  document.getElementById('health-status').innerHTML = '<span style="color:#888;">○ AWG offline</span>';
   document.getElementById('login-page').style.display = 'block';
   document.getElementById('main-page').style.display = 'none';
 }
@@ -625,6 +646,8 @@ function showMain() {
   try {
     if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) connectWS();
   } catch(e) { console.error('connectWS:', e); }
+  try { updateAwgHealth(); } catch(e) { console.error('updateAwgHealth:', e); }
+  if (!healthPollTimer) healthPollTimer = setInterval(updateAwgHealth, 15000);
   try { loadPeers(); } catch(e) { console.error('loadPeers:', e); }
   try { loadDashboard(); } catch(e) { console.error('loadDashboard:', e); }
   try { updateLastCollect(); } catch(e) { console.error('updateLastCollect:', e); }
