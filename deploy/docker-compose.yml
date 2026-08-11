@@ -1,0 +1,42 @@
+services:
+  awg-tunnel:
+    image: alpine:3.20
+    container_name: awg-tunnel
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - ${AWG_DATA_DIR:-/data/awg}:/data
+      - ./init-tunnel.sh:/init.sh:ro
+      - ./amneziawg-go:/init/amneziawg-go:ro
+    command: ["/bin/sh", "/init.sh"]
+    network_mode: host
+
+  awg-panel:
+    image: ghcr.io/sllikmll/amnezia-panel:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: awg-panel
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    network_mode: host
+    volumes:
+      - ${AWG_DATA_DIR:-/data/awg}:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      PANEL_ADMIN_USER: ${PANEL_ADMIN_USER:-admin}
+      PANEL_ADMIN_PASSWORD: ${PANEL_ADMIN_PASSWORD:?set PANEL_ADMIN_PASSWORD in deploy/.env}
+      PANEL_SECRET_KEY: ${PANEL_SECRET_KEY:?set PANEL_SECRET_KEY in deploy/.env}
+      PANEL_ENCRYPTION_KEY: ${PANEL_ENCRYPTION_KEY:-}
+      AWG_CONFIG_PATH: ${AWG_CONFIG_PATH:-/data/awg0.conf}
+      AWG_ENDPOINT: ${AWG_ENDPOINT:-vpn.example.com:51820}
+      AWG_LISTEN_PORT: ${AWG_LISTEN_PORT:-51820}
+      AWG_DB_PATH: ${AWG_DB_PATH:-/data/panel.db}
+      AWG_DATA_DIR: /data
+      PANEL_PORT: ${PANEL_PORT:-8888}
+    depends_on:
+      - awg-tunnel

@@ -1,0 +1,4 @@
+amnezia.example.com {
+  reverse_proxy awg-panel:8080
+  encode gzip
+}

@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>AmneziaWG Panel</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         background: #0f1923; color: #e0e6ed; padding: 20px; }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { color: #4ade80; margin-bottom: 20px; font-size: 24px; }
+  h2 { color: #4ade80; margin-bottom: 15px; font-size: 18px; }
+  .login-form { max-width: 320px; margin: 100px auto; background: #1a2a3a;
+                padding: 30px; border-radius: 10px; }
+  .login-form h2 { margin-bottom: 20px; }
+  input, select { width: 100%; padding: 10px; margin: 5px 0 15px; border: 1px solid #2a3a4a;
+          background: #0f1923; color: #e0e6ed; border-radius: 5px; }
+  button { background: #4ade80; color: #0f1923; padding: 10px 20px; border: none;
+           border-radius: 5px; cursor: pointer; font-weight: bold; margin-right: 5px; }
+  button:hover { background: #36c46c; }
+  button.secondary { background: #4a5a6a; color: #e0e6ed; }
+  button.danger { background: #f87171; }
+  button:disabled { background: #555; color: #888; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1a2a3a;
+          border-radius: 5px; overflow: hidden; }
+  th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #2a3a4a; }
+  th { background: #2a3a4a; color: #4ade80; font-size: 12px; text-transform: uppercase; }
+  tr:hover { background: #2a3a4a; }
+  .status-on { color: #4ade80; }
+  .status-off { color: #f87171; }
+  .status-online { color: #4ade80; }
+  .status-offline { color: #888; }
+  .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+           background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
+  .modal.active { display: flex; }
+  .modal-content { background: #1a2a3a; padding: 30px; border-radius: 10px;
+                   max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+  .config-box { background: #0f1923; padding: 15px; border-radius: 5px; font-family: monospace;
+                font-size: 12px; max-height: 200px; overflow: auto; white-space: pre-wrap;
+                word-break: break-all; width: 100%; border: none; color: #e0e6ed; }
+  .qr-img { max-width: 256px; margin: 15px auto; display: block; background: white;
+            padding: 10px; border-radius: 5px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .form-group { margin: 15px 0; }
+  .form-group label { display: block; margin-bottom: 5px; color: #4ade80; font-size: 13px; }
+  .error { color: #f87171; margin-top: 10px; }
+  .tabs { display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 1px solid #2a3a4a; }
+  .tab { padding: 10px 20px; cursor: pointer; border-radius: 5px 5px 0 0;
+         background: #1a2a3a; color: #888; border: 1px solid #2a3a4a; border-bottom: none; }
+  .tab.active { background: #2a3a4a; color: #4ade80; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                gap: 15px; margin-bottom: 20px; }
+  .stat-card { background: #1a2a3a; padding: 20px; border-radius: 10px;
+               border-left: 3px solid #4ade80; }
+  .stat-card .label { color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; }
+  .stat-card .value { color: #4ade80; font-size: 22px; font-weight: bold; }
+  .stat-card .sub { color: #888; font-size: 12px; margin-top: 5px; }
+  .peer-selector { display: flex; gap: 10px; margin-bottom: 20px; align-items: end; }
+  .peer-selector .form-group { flex: 1; margin: 0; }
+  .traffic-bar { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
+  .traffic-bar .month { width: 80px; color: #888; }
+  .traffic-bar .bar { flex: 1; height: 24px; background: #2a3a4a; border-radius: 3px; overflow: hidden; position: relative; }
+  .traffic-bar .bar-fill { height: 100%; background: linear-gradient(90deg, #4ade80, #36c46c); }
+  .traffic-bar .value { color: #e0e6ed; font-size: 13px; min-width: 100px; text-align: right; }
+  .empty { text-align: center; padding: 40px; color: #888; }
+  .event-handshake { color: #4ade80; }
+  .event-disconnect { color: #f87171; }
+  code { background: #0f1923; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: bold; }
+  .badge-success { background: #1a3a1a; color: #4ade80; }
+  .badge-muted { background: #2a3a4a; color: #888; }
+  .summary-actions { display: flex; gap: 10px; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div id="login-page" class="login-form">
+    <h2>🔐 AmneziaWG Panel</h2>
+    <input id="username" type="text" placeholder="Логин" value="admin">
+    <input id="password" type="password" placeholder="Пароль" onkeydown="if(event.keyCode==13) login()">
+    <button onclick="login()">Войти</button>
+    <p id="login-error" class="error"></p>
+  </div>
+
+  <div id="main-page" style="display: none;">
+    <div class="header">
+      <h1>🛡️ AmneziaWG — Управление</h1>
+      <div>
+        <span id="user-info" style="margin-right: 15px; color: #888;"></span>
+          <span id="ws-status" style="margin-right: 15px; color: #888;">○ offline</span>
+        <button class="secondary" onclick="logout()">Выход</button>
+      </div>
+    </div>
+
+    <div id="dashboard" class="stats-grid" style="margin-bottom: 20px;"></div>
+
+<div class="tabs">
+      <div class="tab active" data-tab="peers" onclick="switchTab('peers')">👥 Клиенты</div>
+      <div class="tab" data-tab="traffic" onclick="switchTab('traffic')">📊 Трафик</div>
+      <div class="tab" data-tab="connections" onclick="switchTab('connections')">🔌 Подключения</div>
+      <div class="tab" data-tab="servers" onclick="switchTab('servers')">🖥️ Серверы</div>
+      <div class="tab" data-tab="discover" onclick="switchTab('discover')">🔍 Поиск</div>
+      <div class="tab" data-tab="notifications" onclick="switchTab('notifications')">🔔 Уведомления</div>
+    </div>
+
+    <!-- Tab: Peers -->
+    <div id="tab-peers" class="tab-content active">
+      <div class="summary-actions">
+        <button onclick="showCreateModal()">+ Добавить клиента</button>
+        <button class="secondary" onclick="manualCollect()">🔄 Собрать статистику</button>
+        <span id="last-collect" style="color: #888; line-height: 32px; margin-left: auto;"></span>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Имя</th><th>IP</th><th>Статус</th>
+            <th>↓ Загружено</th><th>↑ Отправлено</th>
+            <th>Последний вход</th><th>IP клиента</th>
+            <th>Создан</th><th>Действия</th>
+          </tr>
+        </thead>
+        <tbody id="peers-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Tab: Traffic -->
+    <div id="tab-traffic" class="tab-content">
+      <h2>📊 Сводка за текущий месяц</h2>
+      <div id="summary-cards" class="stats-grid"></div>
+      <div id="summary-table"></div>
+
+      <h2 style="margin-top: 30px;">📈 Детально по peer'у</h2>
+      <div class="peer-selector">
+        <div class="form-group">
+          <label>Peer:</label>
+          <select id="traffic-peer-select"></select>
+        </div>
+        <div class="form-group">
+          <label>Год:</label>
+          <select id="traffic-year-select">
+            <option value="">Все</option>
+          </select>
+        </div>
+        <button onclick="loadTrafficDetail()">Показать</button>
+      </div>
+      <div id="traffic-detail"></div>
+    </div>
+
+    <!-- Tab: Servers -->
+    <div id="tab-discover" class="tab-content">
+      <h2>🔍 Поиск серверов в подсети</h2>
+      <div class="peer-selector">
+        <div class="form-group">
+          <label>Подсеть (CIDR):</label>
+          <input id="discover-subnet" type="text" value="172.16.0.0/24">
+        </div>
+        <button onclick="runDiscover()">🔍 Сканировать</button>
+        <span id="discover-status" style="color: #888; line-height: 32px; margin-left: auto;"></span>
+      </div>
+      <div id="discover-results"></div>
+    </div>
+
+    <div id="tab-notifications" class="tab-content">
+      <h2>🔔 Каналы уведомлений</h2>
+      <div class="summary-actions">
+        <button onclick="showChannelModal()">+ Добавить канал</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Имя</th><th>Тип</th><th>Конфиг</th><th>Вкл</th><th>Действия</th></tr>
+        </thead>
+        <tbody id="channels-tbody"></tbody>
+      </table>
+
+      <h2 style="margin-top: 30px;">📜 Лог уведомлений</h2>
+      <table>
+        <thead>
+          <tr><th>Время</th><th>Событие</th><th>Peer</th><th>Server</th><th>Доставлено</th></tr>
+        </thead>
+        <tbody id="notif-log-tbody"></tbody>
+      </table>
+    </div>
+
+    <div id="channel-modal" class="modal">
+      <div class="modal-content">
+        <h2>Новый канал уведомлений</h2>
+        <div class="form-group">
+          <label>Имя:</label>
+          <input id="ch-name" type="text" placeholder="Telegram primary">
+        </div>
+        <div class="form-group">
+          <label>Тип:</label>
+          <select id="ch-type" onchange="toggleChannelFields()">
+            <option value="telegram">Telegram Bot</option>
+            <option value="webhook">Webhook URL</option>
+            <option value="email">Email (SMTP)</option>
+          </select>
+        </div>
+        <div id="ch-telegram-fields">
+          <div class="form-group">
+            <label>Bot Token:</label>
+            <input id="ch-bot-token" type="text" placeholder="123456:ABC-DEF...">
+          </div>
+          <div class="form-group">
+            <label>Chat ID:</label>
+            <input id="ch-chat-id" type="text" placeholder="-1001234567890">
+          </div>
+        </div>
+        <div id="ch-webhook-fields" style="display:none;">
+          <div class="form-group">
+            <label>Webhook URL:</label>
+            <input id="ch-webhook-url" type="text" placeholder="https://example.com/webhook">
+          </div>
+        </div>
+        <div id="ch-email-fields" style="display:none;">
+          <div class="form-group">
+            <label>SMTP Host:</label>
+            <input id="ch-smtp-host" type="text" placeholder="smtp.gmail.com">
+          </div>
+          <div class="form-group">
+            <label>Port:</label>
+            <input id="ch-smtp-port" type="number" value="587">
+          </div>
+          <div class="form-group">
+            <label>User:</label>
+            <input id="ch-smtp-user" type="text" placeholder="user@gmail.com">
+          </div>
+          <div class="form-group">
+            <label>Password:</label>
+            <input id="ch-smtp-pass" type="password" placeholder="app-password">
+          </div>
+          <div class="form-group">
+            <label>From:</label>
+            <input id="ch-smtp-from" type="text" placeholder="alerts@example.com">
+          </div>
+          <div class="form-group">
+            <label>To (comma-separated):</label>
+            <input id="ch-smtp-to" type="text" placeholder="admin@example.com, ops@example.com">
+          </div>
+          <div class="form-group">
+            <label>TLS:</label>
+            <select id="ch-smtp-tls">
+              <option value="starttls">STARTTLS (порт 587)</option>
+              <option value="ssl">SSL/TLS (порт 465)</option>
+              <option value="0">Без TLS (порт 25)</option>
+            </select>
+          </div>
+        </div>
+        <button onclick="createChannel()">Создать</button>
+        <button class="secondary" onclick="closeModal('channel-modal')">Отмена</button>
+      </div>
+    </div>
+
+    <div id="tab-servers" class="tab-content">
+      <div class="summary-actions">
+        <button onclick="showServerModal()">+ Добавить сервер</button>
+        <span id="last-server-check" style="color: #888; line-height: 32px; margin-left: auto;"></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Имя</th><th>Хост</th><th>Порт</th><th>Контейнер</th>
+            <th>Endpoint</th><th>Статус</th><th>Проверка</th><th>Действия</th>
+          </tr>
+        </thead>
+        <tbody id="servers-tbody"></tbody>
+      </table>
+    </div>
+
+    <h2 style="margin-top: 30px;">📜 Журнал действий (Audit Log)</h2>
+      <table>
+        <thead>
+          <tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Цель</th><th>Детали</th></tr>
+        </thead>
+        <tbody id="audit-tbody"></tbody>
+      </table>
+
+      <div id="server-modal" class="modal">
+      <div class="modal-content">
+        <h2>Новый сервер</h2>
+        <div class="form-group">
+          <label>Имя:</label>
+          <input id="srv-name" type="text" placeholder="Например: server-vps-1">
+        </div>
+        <div class="form-group">
+          <label>Хост (IP или домен):</label>
+          <input id="srv-host" type="text" placeholder="203.0.113.10">
+        </div>
+        <div class="form-group">
+          <label>SSH порт:</label>
+          <input id="srv-port" type="number" value="22">
+        </div>
+        <div class="form-group">
+          <label>SSH user:</label>
+          <input id="srv-user" type="text" value="root">
+        </div>
+        <div class="form-group">
+          <label>Auth:</label>
+          <select id="srv-auth" onchange="toggleAuthFields()">
+            <option value="password">Пароль</option>
+            <option value="key_data">Приватный ключ (PEM)</option>
+            <option value="key_path">Путь к ключу</option>
+          </select>
+        </div>
+        <div class="form-group" id="auth-password">
+          <label>Пароль:</label>
+          <input id="srv-password" type="password" placeholder="SSH password">
+        </div>
+        <div class="form-group" id="auth-key-path" style="display:none;">
+          <label>Путь к ключу на панели:</label>
+          <input id="srv-key-path" type="text" placeholder="/root/.ssh/id_rsa">
+        </div>
+        <div class="form-group" id="auth-key-data" style="display:none;">
+          <label>Приватный ключ (PEM):</label>
+          <textarea id="srv-key-data" rows="5" style="width:100%; font-family: monospace; font-size: 11px; background: #0f1923; color: #e0e6ed; border: 1px solid #2a3a4a; padding: 8px; border-radius: 5px;"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Docker контейнер:</label>
+          <input id="srv-container" type="text" value="awg-tunnel">
+        </div>
+        <div class="form-group">
+          <label>Listen port (VPN):</label>
+          <input id="srv-listen-port" type="number" value="51820">
+        </div>
+        <div class="form-group">
+          <label>Endpoint (для конфигов):</label>
+          <input id="srv-endpoint" type="text" placeholder="vpn.example.com:51820">
+        </div>
+        <div class="form-group">
+          <label>Заметки:</label>
+          <textarea id="srv-notes" rows="2" style="width:100%; background: #0f1923; color: #e0e6ed; border: 1px solid #2a3a4a; padding: 8px; border-radius: 5px;"></textarea>
+        </div>
+        <button onclick="createServer()">Создать</button>
+        <button class="secondary" onclick="closeModal('server-modal')">Отмена</button>
+      </div>
+    </div>
+
+    <!-- Tab: Connections -->
+    <div id="tab-connections" class="tab-content">
+      <div class="peer-selector">
+        <div class="form-group">
+          <label>Peer:</label>
+          <select id="conn-peer-select">
+            <option value="">Все</option>
+          </select>
+        </div>
+        <button onclick="loadConnections()">Показать</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Время</th><th>Peer</th><th>Событие</th><th>IP клиента</th>
+          </tr>
+        </thead>
+        <tbody id="connections-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="create-modal" class="modal">
+    <div class="modal-content">
+      <h2>Новый клиент</h2>
+      <div class="form-group">
+        <label>Сервер:</label>
+        <select id="new-server"></select>
+      </div>
+      <div class="form-group">
+        <label>Имя:</label>
+        <input id="new-name" type="text" placeholder="Например: iPhone-Pavel">
+      </div>
+      <button onclick="createPeer()">Создать</button>
+      <button class="secondary" onclick="closeModal('create-modal')">Отмена</button>
+    </div>
+  </div>
+
+  <div id="config-modal" class="modal">
+    <div class="modal-content">
+      <h2>Клиентский конфиг</h2>
+      <img id="qr-img" class="qr-img" src="" alt="QR Code">
+      <textarea id="config-text" class="config-box" readonly></textarea>
+      <p style="margin-top: 15px;">
+        <button onclick="copyConfig()">📋 Копировать</button>
+        <button class="secondary" onclick="downloadConfig()">💾 Скачать</button>
+        <button class="danger" onclick="closeModal('config-modal')">Закрыть</button>
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+let token = localStorage.getItem('token');
+let currentConfig = '';
+let currentPeers = [];
+let ws = null;
+
+function connectWS() {
+  if (ws) ws.close();
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(proto + '://' + location.host + '/ws');
+  ws.onopen = () => {
+    document.getElementById('ws-status').innerHTML = '<span style="color:#4ade80;">● live</span>';
+    ws.send(JSON.stringify({action: 'ping'}));
+  };
+  ws.onmessage = (e) => {
+    try {
+      const evt = JSON.parse(e.data);
+      handleWSEvent(evt);
+    } catch (err) { console.error('WS parse:', err); }
+  };
+  ws.onclose = () => {
+    document.getElementById('ws-status').innerHTML = '<span style="color:#888;">○ offline</span>';
+    setTimeout(connectWS, 3000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+function handleWSEvent(evt) {
+  // Live notifications
+  if (evt.event === 'peer_added' || evt.event === 'peer_deleted' || evt.event === 'handshake' || evt.event === 'server_up' || evt.event === 'server_down') {
+    flashNotification(evt.event + ': ' + (evt.peer || evt.server || evt.message || ''));
+  }
+  // Обновляем данные на текущей вкладке
+  if (evt.event === 'peer_added' || evt.event === 'peer_deleted') {
+    if (document.getElementById('tab-peers').classList.contains('active')) loadPeers();
+    if (document.getElementById('dashboard')) loadDashboard();
+  } else if (evt.event === 'handshake') {
+    if (document.getElementById('tab-connections').classList.contains('active')) loadConnections();
+  } else if (evt.event === 'server_up' || evt.event === 'server_down') {
+    if (document.getElementById('tab-servers').classList.contains('active')) loadServers();
+  }
+  // Всегда обновляем dashboard
+  if (document.getElementById('dashboard')) loadDashboard();
+}
+
+function flashNotification(msg) {
+  // Простая нотификация в правом нижнем углу
+  const div = document.createElement('div');
+  div.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: #1a2a3a; color: #4ade80; padding: 12px 18px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 9999; font-size: 14px; animation: slideIn 0.3s ease;';
+  div.textContent = '🔔 ' + msg;
+  document.body.appendChild(div);
+  setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 4000);
+}
+
+if (token) {
+  console.log('[init] token found, skipping login');
+  showMain();
+  connectWS();
+} else {
+  console.log('[init] no token, showing login form');
+}
+
+async function api(path, opts = {}) {
+  opts.headers = { 'Authorization': 'Bearer ' + token, ...(opts.headers || {}) };
+  if (opts.body && typeof opts.body !== 'string') opts.body = JSON.stringify(opts.body);
+  if (opts.body && !opts.headers['Content-Type']) opts.headers['Content-Type'] = 'application/json';
+  const r = await fetch('/api' + path, opts);
+  if (r.status === 401) { logout(); return; }
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Error'); }
+  return r.json();
+}
+
+async function login() {
+  const u = document.getElementById('username').value;
+  const p = document.getElementById('password').value;
+  console.log('[login] trying', u);
+  document.getElementById('login-error').textContent = 'Подключение...';
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    });
+    console.log('[login] response', r.status);
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || ('HTTP ' + r.status));
+    }
+    const data = await r.json();
+    token = data.token;
+    localStorage.setItem('token', token);
+    showMain();
+  } catch (e) {
+    document.getElementById('login-error').textContent = e.message;
+  }
+}
+
+function logout() {
+  localStorage.removeItem('token');
+  token = null;
+  document.getElementById('login-page').style.display = 'block';
+  document.getElementById('main-page').style.display = 'none';
+}
+
+function showMain() {
+  console.log('[showMain] switching to main page');
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('main-page').style.display = 'block';
+  // Прячем форму логина сразу
+  try { loadPeers(); } catch(e) { console.error('loadPeers:', e); }
+  try { loadDashboard(); } catch(e) { console.error('loadDashboard:', e); }
+  try { updateLastCollect(); } catch(e) { console.error('updateLastCollect:', e); }
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + tab));
+  if (tab === 'traffic') loadTrafficSummary();
+  if (tab === 'connections') { populatePeerSelects(); loadConnections(); }
+  if (tab === 'servers') { loadServers(); loadAuditLog(); }
+  if (tab === 'discover') { /* user manually triggers */ }
+  if (tab === 'notifications') loadChannels();
+  if (tab === 'peers') loadPeers();
+  loadDashboard();
+}
+
+function fmtBytes(n) {
+  if (!n || n < 0) return '0 B';
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  if (n < 1024*1024*1024) return (n/1024/1024).toFixed(2) + ' MB';
+  return (n/1024/1024/1024).toFixed(2) + ' GB';
+}
+
+function fmtTime(ts) {
+  if (!ts) return '—';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d)) return ts;
+    return d.toLocaleString('ru-RU');
+  } catch { return ts; }
+}
+
+async function loadPeers() {
+  try {
+    currentPeers = await api('/peers');
+    const tbody = document.getElementById('peers-tbody');
+    if (currentPeers.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" class="empty">Нет клиентов. Создайте первого.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = currentPeers.map(p => {
+      const isOnline = p.last_seen && (new Date() - new Date(p.last_seen)) < 5 * 60 * 1000;
+      return `
+      <tr>
+        <td>${p.id}</td>
+        <td>${p.name}</td>
+        <td><code>${p.ip_address}</code></td>
+        <td>
+          <span class="${p.enabled ? 'status-on' : 'status-off'}">${p.enabled ? '● Вкл' : '○ Выкл'}</span>
+          ${p.enabled ? (isOnline ? '<span class="badge badge-success" style="margin-left:5px;">online</span>' : '') : ''}
+        </td>
+        <td>${fmtBytes(p.download_bytes)}</td>
+        <td>${fmtBytes(p.upload_bytes)}</td>
+        <td>${fmtTime(p.last_seen)}</td>
+        <td><code>${p.last_endpoint || '—'}</code></td>
+        <td>${fmtTime(p.created_at)}</td>
+        <td>
+          <button class="secondary" onclick="togglePeer(${p.id})">${p.enabled ? 'Выкл' : 'Вкл'}</button>
+          <button class="danger" onclick="deletePeer(${p.id})">🗑</button>
+        </td>
+      </tr>
+    `}).join('');
+  } catch (e) { console.error('loadPeers:', e); }
+}
+
+async function showCreateModal() {
+  document.getElementById('create-modal').classList.add('active');
+  document.getElementById('new-name').focus();
+  await populateServerSelect();
+}
+
+async function populateServerSelect() {
+  const sel = document.getElementById('new-server');
+  if (!sel) return;
+  try {
+    const servers = await api('/servers');
+    sel.innerHTML = servers.map(s => `<option value="${s.id}">${s.name} (${s.host})</option>`).join('');
+  } catch (e) { console.error(e); }
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+async function createPeer() {
+  const name = document.getElementById('new-name').value.trim();
+  const serverId = parseInt(document.getElementById('new-server').value || 0);
+  if (!name) return alert('Укажите имя');
+  try {
+    const peer = await api('/peers?server_id=' + serverId, { method: 'POST', body: { name } });
+    closeModal('create-modal');
+    currentConfig = peer.config;
+    document.getElementById('qr-img').src = 'data:image/png;base64,' + peer.qr_code;
+    document.getElementById('config-text').value = peer.config;
+    document.getElementById('config-modal').classList.add('active');
+    loadPeers();
+  } catch (e) { alert(e.message); }
+}
+
+async function togglePeer(id) {
+  try {
+    await api(`/peers/${id}/toggle`, { method: 'PATCH' });
+    loadPeers();
+  } catch (e) { alert(e.message); }
+}
+
+async function deletePeer(id) {
+  if (!confirm('Удалить клиента?')) return;
+  try {
+    await api(`/peers/${id}`, { method: 'DELETE' });
+    loadPeers();
+  } catch (e) { alert(e.message); }
+}
+
+function copyConfig() {
+  navigator.clipboard.writeText(currentConfig);
+  alert('Скопировано');
+}
+
+function downloadConfig() {
+  const blob = new Blob([currentConfig], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'amneziawg.conf';
+  a.click();
+}
+
+async function manualCollect() {
+  try {
+    await api('/collect', { method: 'POST' });
+    updateLastCollect();
+    alert('Сбор статистики выполнен');
+    loadPeers();
+  } catch (e) { alert('Ошибка: ' + e.message); }
+}
+
+function updateLastCollect() {
+  document.getElementById('last-collect').textContent =
+    'Автосбор каждые 5 мин • Последний: ' + new Date().toLocaleTimeString('ru-RU');
+}
+
+async function populatePeerSelects() {
+  if (currentPeers.length === 0) await loadPeers();
+  const opts = currentPeers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  document.getElementById('traffic-peer-select').innerHTML = opts;
+  document.getElementById('conn-peer-select').innerHTML = '<option value="">Все</option>' + opts;
+  // Года
+  const years = new Set();
+  const currentYear = new Date().getFullYear();
+  for (let y = currentYear; y >= currentYear - 2; y--) years.add(y);
+  document.getElementById('traffic-year-select').innerHTML =
+    '<option value="">Все</option>' + Array.from(years).map(y => `<option value="${y}">${y}</option>`).join('');
+}
+
+async function loadTrafficSummary() {
+  await populatePeerSelects();
+  try {
+    const data = await api('/traffic/summary');
+    const total_dl = data.peers.reduce((s, p) => s + p.month_download, 0);
+    const total_ul = data.peers.reduce((s, p) => s + p.month_upload, 0);
+    const active = data.peers.filter(p => p.last_seen).length;
+    const cards = document.getElementById('summary-cards');
+    cards.innerHTML = `
+      <div class="stat-card">
+        <div class="label">Период</div>
+        <div class="value">${data.year_month}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">↓ Загружено (месяц)</div>
+        <div class="value">${fmtBytes(total_dl)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">↑ Отправлено (месяц)</div>
+        <div class="value">${fmtBytes(total_ul)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Клиентов</div>
+        <div class="value">${data.peers.length}</div>
+        <div class="sub">${active} с историей</div>
+      </div>
+    `;
+
+    const table = document.getElementById('summary-table');
+    if (data.peers.length === 0) {
+      table.innerHTML = '<div class="empty">Нет данных</div>';
+      return;
+    }
+    table.innerHTML = `
+      <table>
+        <thead>
+          <tr><th>Клиент</th><th>↓ Месяц</th><th>↑ Месяц</th><th>↓ Всего</th><th>↑ Всего</th><th>Последний вход</th></tr>
+        </thead>
+        <tbody>
+          ${data.peers.map(p => `
+            <tr>
+              <td>${p.name}</td>
+              <td>${fmtBytes(p.month_download)}</td>
+              <td>${fmtBytes(p.month_upload)}</td>
+              <td>${fmtBytes(p.total_download)}</td>
+              <td>${fmtBytes(p.total_upload)}</td>
+              <td>${p.last_seen ? fmtTime(p.last_seen) : '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) { console.error(e); }
+}
+
+async function loadTrafficDetail() {
+  const peerId = document.getElementById('traffic-peer-select').value;
+  const year = document.getElementById('traffic-year-select').value;
+  if (!peerId) {
+    document.getElementById('traffic-detail').innerHTML = '<div class="empty">Выберите peer</div>';
+    return;
+  }
+  try {
+    const query = year ? `?year=${year}` : '';
+    const data = await api(`/traffic/peer/${peerId}${query}`);
+    const peer = currentPeers.find(p => p.id == peerId);
+    const detail = document.getElementById('traffic-detail');
+
+    if (data.monthly.length === 0) {
+      detail.innerHTML = `<div class="empty">Нет данных по ${peer?.name || 'peer'}.<br>Коллектор собирает снимки автоматически каждые 5 минут.</div>`;
+      return;
+    }
+
+    // Максимум для шкалы
+    const maxBytes = Math.max(...data.monthly.map(m => m.download_bytes), 1);
+
+    const months = data.monthly.map(m => {
+      const monthName = new Date(m.year, m.month - 1).toLocaleString('ru-RU', { month: 'long' });
+      const dlPercent = (m.download_bytes / maxBytes) * 100;
+      return `
+        <div class="traffic-bar">
+          <div class="month">${monthName} ${m.year}</div>
+          <div class="bar">
+            <div class="bar-fill" style="width: ${dlPercent}%;"></div>
+          </div>
+          <div class="value">↓ ${fmtBytes(m.download_bytes)} ↑ ${fmtBytes(m.upload_bytes)}</div>
+        </div>
+      `;
+    }).join('');
+
+    detail.innerHTML = `
+      <h2>${peer ? peer.name : 'Peer #' + peerId}</h2>
+      ${months}
+    `;
+  } catch (e) { console.error(e); }
+}
+
+async function loadConnections() {
+  const peerId = document.getElementById('conn-peer-select').value;
+  const query = peerId ? `?peer_id=${peerId}` : '';
+  try {
+    const data = await api(`/connections${query}`);
+    const tbody = document.getElementById('connections-tbody');
+    if (data.logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">Нет событий</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.logs.map(l => `
+      <tr>
+        <td>${fmtTime(l.timestamp)}</td>
+        <td>${l.peer_name}</td>
+        <td><span class="event-${l.event_type}">${l.event_type === 'handshake' ? '🔗 Handshake' : '🔌 Disconnect'}</span></td>
+        <td><code>${l.endpoint || '—'}</code></td>
+      </tr>
+    `).join('');
+  } catch (e) { console.error(e); }
+}
+
+async function loadServers() {
+  try {
+    const servers = await api('/servers');
+    const tbody = document.getElementById('servers-tbody');
+    if (servers.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">Нет серверов. Добавьте удалённый сервер.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = servers.map(s => {
+      const statusClass = s.status === 'ok' ? 'status-on' : (s.status === 'error' ? 'status-off' : '');
+      const isLocal = s.id === 0;
+      return `
+      <tr>
+        <td>${s.id}</td>
+        <td><strong>${s.name}</strong> ${isLocal ? '<span class="badge badge-muted">local</span>' : ''}</td>
+        <td><code>${s.host}:${s.port}</code></td>
+        <td>${s.port}</td>
+        <td><code>${s.amnezia_container}</code></td>
+        <td><code>${s.endpoint || '—'}</code></td>
+        <td><span class="${statusClass}">${s.status}</span></td>
+        <td>${s.last_check ? fmtTime(s.last_check) : '—'}</td>
+        <td>
+          <button class="secondary" onclick="testServer(${s.id})">Тест</button>
+          ${!isLocal ? `<button class="secondary" onclick="serverAction(${s.id},'restart')">⟳</button>` : ''}
+          ${!isLocal ? `<button class="danger" onclick="deleteServer(${s.id})">🗑</button>` : ''}
+        </td>
+      </tr>
+    `}).join('');
+  } catch (e) { console.error(e); }
+}
+
+async function testServer(id) {
+  try {
+    const r = await api(`/servers/${id}/test`, { method: 'POST' });
+    let msg = `Хост: ${r.host}\nКонтейнер: ${r.container_status}\nAWG: ${r.awg_status}\nPort: ${r.listen_port || '—'}\nPeers: ${r.peer_count}`;
+    if (!r.ok) msg = `ОШИБКА: ${r.error}`;
+    alert(msg);
+    loadServers();
+  } catch (e) { alert('Ошибка: ' + e.message); }
+}
+
+async function serverAction(id, action) {
+  if (!confirm(`${action}?`)) return;
+  try {
+    await api(`/servers/${id}/action`, { method: 'POST', body: { action } });
+    alert('OK');
+    testServer(id);
+  } catch (e) { alert('Ошибка: ' + e.message); }
+}
+
+async function deleteServer(id) {
+  if (!confirm('Удалить сервер и все его peer\'ы?')) return;
+  try {
+    await api(`/servers/${id}`, { method: 'DELETE' });
+    loadServers();
+  } catch (e) { alert(e.message); }
+}
+
+function showServerModal() {
+  document.getElementById('server-modal').classList.add('active');
+  document.getElementById('srv-name').focus();
+}
+
+function toggleAuthFields() {
+  const auth = document.getElementById('srv-auth').value;
+  document.getElementById('auth-password').style.display = (auth === 'password') ? '' : 'none';
+  document.getElementById('auth-key-path').style.display = (auth === 'key_path') ? '' : 'none';
+  document.getElementById('auth-key-data').style.display = (auth === 'key_data') ? '' : 'none';
+}
+
+async function createServer() {
+  const auth = document.getElementById('srv-auth').value;
+  const data = {
+    name: document.getElementById('srv-name').value.trim(),
+    host: document.getElementById('srv-host').value.trim(),
+    port: parseInt(document.getElementById('srv-port').value),
+    username: document.getElementById('srv-user').value.trim(),
+    auth_type: auth,
+    amnezia_container: document.getElementById('srv-container').value.trim() || 'awg-tunnel',
+    listen_port: parseInt(document.getElementById('srv-listen-port').value) || 51820,
+    endpoint: document.getElementById('srv-endpoint').value.trim() || null,
+    notes: document.getElementById('srv-notes').value.trim() || null,
+  };
+  if (auth === 'password') data.password = document.getElementById('srv-password').value;
+  else if (auth === 'key_path') data.key_path = document.getElementById('srv-key-path').value.trim();
+  else if (auth === 'key_data') data.key_data = document.getElementById('srv-key-data').value.trim();
+
+  if (!data.name || !data.host) { alert('Заполните имя и хост'); return; }
+  try {
+    await api('/servers', { method: 'POST', body: data });
+    closeModal('server-modal');
+    loadServers();
+  } catch (e) { alert(e.message); }
+}
+
+async function loadDashboard() {
+  try {
+    const data = await api('/aggregate/stats');
+    const el = document.getElementById('dashboard');
+    const fmtB = (n) => {
+      if (!n) return '0 B';
+      if (n < 1024) return n + ' B';
+      if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+      if (n < 1024*1024*1024) return (n/1024/1024).toFixed(2) + ' MB';
+      return (n/1024/1024/1024).toFixed(2) + ' GB';
+    };
+    el.innerHTML = `
+      <div class="stat-card">
+        <div class="label">Серверов</div>
+        <div class="value">${data.servers.length}</div>
+        <div class="sub">${data.ok_count} онлайн</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Клиентов</div>
+        <div class="value">${data.total_peers}</div>
+        <div class="sub">${data.active_peers} активных</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">↓ Загружено (всего)</div>
+        <div class="value">${fmtB(data.total_download)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">↑ Отправлено (всего)</div>
+        <div class="value">${fmtB(data.total_upload)}</div>
+      </div>
+    `;
+  } catch (e) { console.error('dashboard:', e); }
+}
+
+async function loadAuditLog() {
+  try {
+    const r = await api('/audit?limit=50');
+    const tbody = document.getElementById('audit-tbody');
+    if (!tbody) return;
+    if (!r.log || r.log.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">Нет записей</td></tr>';
+      return;
+    }
+    tbody.innerHTML = r.log.map(l => `
+      <tr>
+        <td>${fmtTime(l.timestamp)}</td>
+        <td>${l.user}</td>
+        <td><code>${l.action}</code></td>
+        <td>${l.target || '—'}</td>
+        <td>${l.details || '—'}</td>
+      </tr>
+    `).join('');
+  } catch (e) { console.error(e); }
+}
+
+async function runDiscover() {
+  const subnet = document.getElementById('discover-subnet').value.trim() || '172.16.0.0/24';
+  document.getElementById('discover-status').textContent = 'Сканирование...';
+  try {
+    const data = await api('/discover/scan?subnet=' + encodeURIComponent(subnet));
+    if (data.error) {
+      document.getElementById('discover-status').textContent = 'Ошибка: ' + data.error;
+      return;
+    }
+    document.getElementById('discover-status').textContent =
+      'Сканировано ' + data.scanned + ', найдено ' + data.alive + ', кандидатов ' + data.candidates.length;
+    const el = document.getElementById('discover-results');
+    if (data.candidates.length === 0) {
+      el.innerHTML = '<div class="empty">Ничего не найдено</div>';
+      return;
+    }
+    let rows = '';
+    for (const c of data.candidates) {
+      rows += '<tr><td><code>' + c.ip + '</code></td><td>' + (c.hostname || '—') + '</td><td>' + (c.ssh ? '✓' : '—') + '</td><td>' + (c.amneziawg ? '✓' : '—') + '</td><td>' + (c.panel ? c.panel.port : '—') + '</td><td><strong>' + c.score + '</strong></td></tr>';
+    }
+    el.innerHTML = '<table style="margin-top: 15px;"><thead><tr><th>IP</th><th>Hostname</th><th>SSH</th><th>AWG</th><th>Панель</th><th>Score</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  } catch (e) {
+    document.getElementById('discover-status').textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+async function loadChannels() {
+  try {
+    const channels = await api('/notifications/channels');
+    const tbody = document.getElementById('channels-tbody');
+    if (channels.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">Нет каналов</td></tr>';
+    } else {
+      let r = '';
+      for (const c of channels) {
+        r += '<tr><td>' + c.id + '</td><td>' + c.name + '</td><td>' + c.type + '</td><td><code>' + JSON.stringify(c.config) + '</code></td><td>' + (c.enabled ? '✓' : '—') + '</td><td><button class="secondary" onclick="toggleChannel(' + c.id + ',' + (!c.enabled) + ')">' + (c.enabled ? 'Выкл' : 'Вкл') + '</button> <button class="danger" onclick="deleteChannel(' + c.id + ')">🗑</button></td></tr>';
+      }
+      tbody.innerHTML = r;
+    }
+    const log = await api('/notifications/log?limit=30');
+    const lt = document.getElementById('notif-log-tbody');
+    if (!log.log || log.log.length === 0) {
+      lt.innerHTML = '<tr><td colspan="5" class="empty">Нет событий</td></tr>';
+    } else {
+      let r = '';
+      for (const l of log.log) {
+        r += '<tr><td>' + fmtTime(l.timestamp) + '</td><td><code>' + l.event + '</code></td><td>' + (l.peer_id || '—') + '</td><td>' + (l.server_id || '—') + '</td><td>' + (l.sent ? '✓' : '✗') + '</td></tr>';
+      }
+      lt.innerHTML = r;
+    }
+  } catch (e) { console.error(e); }
+}
+
+function showChannelModal() {
+  document.getElementById('channel-modal').classList.add('active');
+  document.getElementById('ch-name').focus();
+}
+
+function toggleChannelFields() {
+  const type = document.getElementById('ch-type').value;
+  document.getElementById('ch-telegram-fields').style.display = (type === 'telegram') ? '' : 'none';
+  document.getElementById('ch-webhook-fields').style.display = (type === 'webhook') ? '' : 'none';
+  document.getElementById('ch-email-fields').style.display = (type === 'email') ? '' : 'none';
+}
+
+async function createChannel() {
+  const type = document.getElementById('ch-type').value;
+  let config = {};
+  if (type === 'telegram') {
+    config = { bot_token: document.getElementById('ch-bot-token').value.trim(),
+               chat_id: document.getElementById('ch-chat-id').value.trim() };
+  } else if (type === 'webhook') {
+    config = { url: document.getElementById('ch-webhook-url').value.trim() };
+  } else if (type === 'email') {
+    const toRaw = document.getElementById('ch-smtp-to').value.trim();
+    config = {
+      host: document.getElementById('ch-smtp-host').value.trim(),
+      port: parseInt(document.getElementById('ch-smtp-port').value) || 587,
+      user: document.getElementById('ch-smtp-user').value.trim(),
+      password: document.getElementById('ch-smtp-pass').value,
+      from_addr: document.getElementById('ch-smtp-from').value.trim() || document.getElementById('ch-smtp-user').value.trim(),
+      to_addrs: toRaw ? toRaw.split(',').map(s => s.trim()).filter(s => s) : [],
+      use_tls: document.getElementById('ch-smtp-tls').value,
+    };
+  }
+  const data = {
+    name: document.getElementById('ch-name').value.trim(),
+    type: type,
+    config: config
+  };
+  if (!data.name) return alert('Укажите имя');
+  try {
+    await api('/notifications/channels', { method: 'POST', body: data });
+    closeModal('channel-modal');
+    loadChannels();
+  } catch (e) { alert(e.message); }
+}
+
+async function deleteChannel(id) {
+  if (!confirm('Удалить канал?')) return;
+  try { await api('/notifications/channels/' + id, { method: 'DELETE' }); loadChannels(); }
+  catch (e) { alert(e.message); }
+}
+
+async function toggleChannel(id, enabled) {
+  try { await api('/notifications/channels/' + id, { method: 'PATCH', body: { enabled } }); loadChannels(); }
+  catch (e) { alert(e.message); }
+}
+
+setInterval(() => {
+  if (token && document.getElementById('tab-peers').classList.contains('active')) {
+    loadPeers();
+  }
+}, 30000);
+</script>
+</body>
+</html>
