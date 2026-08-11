@@ -58,7 +58,7 @@ SECRET_KEY = os.getenv("PANEL_SECRET_KEY", secrets.token_urlsafe(32))
 JWT_ALG = "HS256"
 JWT_HOURS = 24
 TRAFFIC_COLLECT_INTERVAL = int(os.getenv("TRAFFIC_INTERVAL", "300"))  # 5 минут
-APP_VERSION = os.getenv("PANEL_VERSION", "1.1.4").lstrip("v")
+APP_VERSION = os.getenv("PANEL_VERSION", "1.1.5").lstrip("v")
 PANEL_REPO = os.getenv("PANEL_REPO", "sllikmll/amnezia-panel")
 PANEL_IMAGE = os.getenv("PANEL_IMAGE", "ghcr.io/sllikmll/amnezia-panel:latest")
 PANEL_UPDATE_COMMAND = os.getenv("PANEL_UPDATE_COMMAND", "/usr/local/bin/update-panel")
@@ -443,7 +443,7 @@ def gen_client_config_remote(private_key: str, ip: str, psk: str, server_pubkey:
         "[Interface]\n"
         f"PrivateKey = {private_key}\n"
         f"Address = {ip}/32\n"
-        f"DNS = 1.1.4.1, 8.8.8.8\n"
+        f"DNS = 1.1.5.1, 8.8.8.8\n"
         "\n[Peer]\n"
         f"PublicKey = {server_pubkey}\n"
         f"PresharedKey = {psk}\n"
@@ -458,7 +458,7 @@ def gen_client_config(peer: dict, server_pubkey: str) -> str:
         "[Interface]\n"
         f"PrivateKey = {peer['private_key']}\n"
         f"Address = {peer['ip_address']}/32\n"
-        f"DNS = 1.1.4.1, 8.8.8.8\n"
+        f"DNS = 1.1.5.1, 8.8.8.8\n"
         "\n[Peer]\n"
         f"PublicKey = {server_pubkey}\n"
         f"PresharedKey = {peer['preshared_key']}\n"

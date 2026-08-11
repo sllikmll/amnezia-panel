@@ -157,7 +157,7 @@ def check_server_health(row: Dict) -> Dict:
             try:
                 r2 = subprocess.run(
                     ["docker", "exec", row.get("amnezia_container", "awg-tunnel"),
-                     "/usr/local/bin/awg", "show"],
+                     "sh", "-lc", "AWG=$(command -v awg || echo /usr/local/bin/awg); $AWG show"],
                     capture_output=True, text=True, timeout=10
                 )
                 out2 = r2.stdout
@@ -182,7 +182,7 @@ def check_server_health(row: Dict) -> Dict:
                 container_status = "running" if rc == 0 and out.strip() else "not_found"
                 # Проверяем awg
                 rc2, out2, _ = ssh.exec(
-                    f"docker exec {_shell_quote(container)} /usr/local/bin/awg show",
+                    f"docker exec {_shell_quote(container)} sh -lc 'AWG=$(command -v awg || echo /usr/local/bin/awg); $AWG show'",
                     timeout=15
                 )
                 awg_status = "running" if "listening port" in out2 else "down"
@@ -192,8 +192,9 @@ def check_server_health(row: Dict) -> Dict:
                         if "listening port" in line:
                             listen_port = line.split(":")[-1].strip()
 
+        ok = container_status == "running" and awg_status == "running"
         return {
-            "ok": True,
+            "ok": ok,
             "container_status": container_status,
             "awg_status": awg_status,
             "listen_port": listen_port,
