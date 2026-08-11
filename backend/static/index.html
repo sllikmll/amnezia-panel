@@ -611,6 +611,8 @@ async function login() {
 function logout() {
   localStorage.removeItem('token');
   token = null;
+  if (ws) { try { ws.close(); } catch(e) {} ws = null; }
+  document.getElementById('ws-status').innerHTML = '<span style="color:#888;">○ offline</span>';
   document.getElementById('login-page').style.display = 'block';
   document.getElementById('main-page').style.display = 'none';
 }
@@ -619,7 +621,10 @@ function showMain() {
   console.log('[showMain] switching to main page');
   document.getElementById('login-page').style.display = 'none';
   document.getElementById('main-page').style.display = 'block';
-  // Прячем форму логина сразу
+  // Поднимаем realtime-индикатор и события как после fresh-login, так и после reload с token.
+  try {
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) connectWS();
+  } catch(e) { console.error('connectWS:', e); }
   try { loadPeers(); } catch(e) { console.error('loadPeers:', e); }
   try { loadDashboard(); } catch(e) { console.error('loadDashboard:', e); }
   try { updateLastCollect(); } catch(e) { console.error('updateLastCollect:', e); }

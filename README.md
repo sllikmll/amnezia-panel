@@ -4,7 +4,7 @@
 
 Веб-панель для тестового управления AmneziaWG/WireGuard-подобным VPN-контуром: локальный `awg-tunnel`, peer CRUD, QR/конфиги клиентов, traffic accounting, уведомления, WebSocket live-события и multi-server управление через SSH.
 
-![Version](https://img.shields.io/badge/version-1.1.2-blue)
+![Version](https://img.shields.io/badge/version-1.1.3-blue)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
@@ -178,7 +178,7 @@ docker build -t ghcr.io/sllikmll/amnezia-panel:latest .
 
 | Переменная | Default | Назначение |
 |---|---|---|
-| `PANEL_VERSION` | `1.1.2` | текущая версия приложения |
+| `PANEL_VERSION` | `1.1.3` | текущая версия приложения |
 | `PANEL_REPO` | `sllikmll/amnezia-panel` | GitHub repo для latest release check |
 | `PANEL_IMAGE` | `ghcr.io/sllikmll/amnezia-panel:latest` | Docker image, который тянет updater |
 | `PANEL_CONTAINER_NAME` | `awg-panel` | имя контейнера панели |
