@@ -58,6 +58,9 @@
   th, td { padding: 13px 15px; text-align: left; border-bottom: 1px solid rgba(125,211,252,.09); }
   th { background: rgba(18, 35, 59, .98); color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
   tr:hover { background: rgba(34,211,238,.045); }
+  .clickable-row { cursor: pointer; }
+  .clickable-row td:first-child { border-left: 3px solid transparent; }
+  .clickable-row:hover td:first-child { border-left-color: var(--accent); }
   .status-on, .status-online { color: var(--accent2); }
   .status-off, .status-offline { color: var(--danger); }
   .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(8px); }
@@ -296,6 +299,7 @@
     <div id="tab-servers" class="tab-content">
       <div class="summary-actions">
         <button onclick="showServerModal()">+ Добавить сервер</button>
+        <button class="secondary" onclick="refreshAllServerClients()">🔄 Обновить клиентов со всех серверов</button>
         <span id="last-server-check" style="color: #888; line-height: 32px; margin-left: auto;"></span>
       </div>
       <table>
@@ -417,7 +421,7 @@
 
   <div id="config-modal" class="modal">
     <div class="modal-content">
-      <h2>Клиентский конфиг</h2>
+      <h2 id="config-title">Клиентский конфиг</h2>
       <img id="qr-img" class="qr-img" src="" alt="QR Code">
       <textarea id="config-text" class="config-box" readonly></textarea>
       <p style="margin-top: 15px;">
@@ -432,6 +436,7 @@
 <script>
 let token = localStorage.getItem('token');
 let currentConfig = '';
+let currentConfigName = 'amneziawg';
 let currentPeers = [];
 let ws = null;
 let updateCheck = null;
@@ -694,9 +699,9 @@ async function loadPeers() {
     tbody.innerHTML = currentPeers.map(p => {
       const isOnline = p.last_seen && (new Date() - new Date(p.last_seen)) < 5 * 60 * 1000;
       return `
-      <tr>
+      <tr class="clickable-row" onclick="showPeerConfig(${p.id})" title="Открыть конфиг клиента">
         <td>${p.id}</td>
-        <td>${p.name}</td>
+        <td><strong>${p.name}</strong></td>
         <td><code>${p.ip_address}</code></td>
         <td>
           <span class="${p.enabled ? 'status-on' : 'status-off'}">${p.enabled ? '● Вкл' : '○ Выкл'}</span>
@@ -708,8 +713,9 @@ async function loadPeers() {
         <td><code>${p.last_endpoint || '—'}</code></td>
         <td>${fmtTime(p.created_at)}</td>
         <td>
-          <button class="secondary" onclick="togglePeer(${p.id})">${p.enabled ? 'Выкл' : 'Вкл'}</button>
-          <button class="danger" onclick="deletePeer(${p.id})">🗑</button>
+          <button class="secondary" onclick="event.stopPropagation(); showPeerConfig(${p.id})">Конфиг</button>
+          <button class="secondary" onclick="event.stopPropagation(); togglePeer(${p.id})">${p.enabled ? 'Выкл' : 'Вкл'}</button>
+          <button class="danger" onclick="event.stopPropagation(); deletePeer(${p.id})">🗑</button>
         </td>
       </tr>
     `}).join('');
@@ -743,11 +749,26 @@ async function createPeer() {
     const peer = await api('/peers?server_id=' + serverId, { method: 'POST', body: { name } });
     closeModal('create-modal');
     currentConfig = peer.config;
+    currentConfigName = peer.name || 'amneziawg';
+    document.getElementById('config-title').textContent = 'Клиентский конфиг: ' + currentConfigName;
     document.getElementById('qr-img').src = 'data:image/png;base64,' + peer.qr_code;
     document.getElementById('config-text').value = peer.config;
     document.getElementById('config-modal').classList.add('active');
     loadPeers();
   } catch (e) { alert(e.message); }
+}
+
+
+async function showPeerConfig(id) {
+  try {
+    const peer = await api(`/peers/${id}/config`);
+    currentConfig = peer.config;
+    currentConfigName = peer.name || ('peer-' + id);
+    document.getElementById('config-title').textContent = 'Клиентский конфиг: ' + currentConfigName;
+    document.getElementById('qr-img').src = 'data:image/png;base64,' + peer.qr_code;
+    document.getElementById('config-text').value = peer.config;
+    document.getElementById('config-modal').classList.add('active');
+  } catch (e) { alert('Не удалось открыть конфиг: ' + e.message); }
 }
 
 async function togglePeer(id) {
@@ -774,7 +795,7 @@ function downloadConfig() {
   const blob = new Blob([currentConfig], { type: 'text/plain' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'amneziawg.conf';
+  a.download = (currentConfigName || 'amneziawg') + '.conf';
   a.click();
 }
 
@@ -946,6 +967,7 @@ async function loadServers() {
         <td>${s.last_check ? fmtTime(s.last_check) : '—'}</td>
         <td>
           <button class="secondary" onclick="testServer(${s.id})">Тест</button>
+          ${!isLocal ? `<button class="secondary" onclick="importServerClients(${s.id})">Клиенты</button>` : ''}
           ${!isLocal ? `<button class="secondary" onclick="serverAction(${s.id},'restart')">⟳</button>` : ''}
           ${!isLocal ? `<button class="danger" onclick="deleteServer(${s.id})">🗑</button>` : ''}
         </td>
@@ -958,10 +980,40 @@ async function testServer(id) {
   try {
     const r = await api(`/servers/${id}/test`, { method: 'POST' });
     let msg = `Хост: ${r.host}\nКонтейнер: ${r.container_status}\nAWG: ${r.awg_status}\nPort: ${r.listen_port || '—'}\nPeers: ${r.peer_count}`;
+    if (r.import_result) msg += `\nКлиенты: +${r.import_result.imported || 0}, обновлено ${r.import_result.updated || 0}, пропущено ${r.import_result.skipped || 0}`;
     if (!r.ok) msg = `ОШИБКА: ${r.error}`;
     alert(msg);
     loadServers();
   } catch (e) { alert('Ошибка: ' + e.message); }
+}
+
+
+async function importServerClients(id) {
+  try {
+    const r = await api(`/servers/${id}/import-clients`, { method: 'POST' });
+    alert(`Клиенты обновлены\nИмпортировано: ${r.imported}\nОбновлено: ${r.updated}\nПропущено: ${r.skipped}\nВсего файлов: ${r.total}`);
+    await loadPeers();
+    await loadServers();
+    await loadDashboard();
+  } catch (e) { alert('Ошибка импорта клиентов: ' + e.message); }
+}
+
+async function refreshAllServerClients() {
+  try {
+    const servers = await api('/servers');
+    let imported = 0, updated = 0, skipped = 0, total = 0;
+    for (const s of servers.filter(x => x.id !== 0)) {
+      const r = await api(`/servers/${s.id}/import-clients`, { method: 'POST' });
+      imported += r.imported || 0;
+      updated += r.updated || 0;
+      skipped += r.skipped || 0;
+      total += r.total || 0;
+    }
+    alert(`Клиенты обновлены со всех серверов\nИмпортировано: ${imported}\nОбновлено: ${updated}\nПропущено: ${skipped}\nВсего файлов: ${total}`);
+    await loadPeers();
+    await loadServers();
+    await loadDashboard();
+  } catch (e) { alert('Ошибка обновления клиентов: ' + e.message); }
 }
 
 async function serverAction(id, action) {
@@ -1014,7 +1066,9 @@ async function createServer() {
   try {
     await api('/servers', { method: 'POST', body: data });
     closeModal('server-modal');
-    loadServers();
+    await loadServers();
+    await loadPeers();
+    await loadDashboard();
   } catch (e) { alert(e.message); }
 }
 

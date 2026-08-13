@@ -20,6 +20,7 @@
 - Создание и удаление peer'ов.
 - Генерация private/public key и preshared key.
 - QR-код и `.conf` для импорта в AmneziaVPN/WireGuard-клиент.
+- Просмотр и скачивание `.conf` для уже существующих/импортированных клиентов по клику на строку клиента.
 - Включение/отключение peer'ов.
 - Учёт трафика peer'ов и логирование handshake-событий.
 
@@ -29,6 +30,7 @@
 - SSH-подключение через password, key path или PEM key data.
 - Проверка удалённых Docker/AmneziaWG контейнеров.
 - `start` / `stop` / `restart` удалённого контейнера.
+- Импорт существующих клиентов из `clients/*.conf` при добавлении сервера и вручную кнопкой **Обновить клиентов**.
 - Сводная статистика по серверам.
 
 ### Уведомления и realtime
@@ -200,6 +202,7 @@ docker build -t ghcr.io/sllikmll/amnezia-panel:latest .
 | `POST` | `/api/login` | логин, возвращает JWT |
 | `GET` | `/api/peers` | список peer'ов без private key/PSK |
 | `POST` | `/api/peers` | создать peer и вернуть client config/QR |
+| `GET` | `/api/peers/{peer_id}/config` | вернуть конфиг и QR для существующего/импортированного клиента |
 | `DELETE` | `/api/peers/{peer_id}` | удалить peer |
 | `PATCH` | `/api/peers/{peer_id}/toggle` | включить/выключить peer |
 | `GET` | `/api/traffic/summary` | сводка трафика |
@@ -211,7 +214,8 @@ docker build -t ghcr.io/sllikmll/amnezia-panel:latest .
 | `GET` | `/api/servers/{server_id}` | получить сервер |
 | `PUT` | `/api/servers/{server_id}` | обновить сервер |
 | `DELETE` | `/api/servers/{server_id}` | удалить сервер из панели |
-| `POST` | `/api/servers/{server_id}/test` | проверить SSH/Docker/AWG |
+| `POST` | `/api/servers/{server_id}/test` | проверить SSH/Docker/AWG и обновить импорт клиентов |
+| `POST` | `/api/servers/{server_id}/import-clients` | импортировать/обновить клиентов из persisted `.conf` файлов сервера |
 | `POST` | `/api/servers/{server_id}/action` | `start` / `stop` / `restart` |
 | `GET` | `/api/servers/{server_id}/peers` | runtime peer'ы на сервере |
 | `GET` | `/api/aggregate/stats` | агрегированная статистика |
@@ -233,6 +237,25 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8888/api/servers
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8888/api/peers
 ```
 
+### Импорт существующих клиентов
+
+При добавлении удалённого сервера панель автоматически пытается импортировать уже созданных клиентов из persisted конфигов:
+
+```text
+/opt/amnezia/state/amnezia-awg2-direct/clients/*.conf
+/opt/amnezia/state/amnezia-awg2/clients/*.conf
+/opt/amnezia/state/<container>/clients/*.conf
+```
+
+Это нужно потому, что `awg show all dump` показывает runtime peer'ы и трафик, но не содержит client private key/PSK, необходимых для повторной выдачи `.conf`.
+
+На вкладке **Серверы** есть кнопки:
+
+- **Клиенты** — обновить список клиентов конкретного сервера;
+- **Обновить клиентов со всех серверов** — массовый импорт по всем remote-серверам.
+
+На вкладке **Клиенты** строка клиента кликабельна: открывается QR и полный `.conf`, который можно скопировать или скачать.
+
 ---
 
 ## Безопасность
@@ -244,6 +267,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8888/api/peers
 - Fernet-шифрование SSH password/key data в SQLite.
 - `/api/servers` отдаёт только `has_password` / `has_key`, не сами credentials.
 - `/api/peers` не отдаёт private key и PSK в списке.
+- Полный клиентский `.conf` отдаётся только авторизованным запросом `GET /api/peers/{peer_id}/config`.
 - Compose не содержит тестовый пароль или захардкоженный JWT secret.
 
 Что ещё нужно для production:

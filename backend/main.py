@@ -15,6 +15,7 @@ import sqlite3
 import asyncio
 import threading
 import re
+import shlex
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict
@@ -41,6 +42,7 @@ from multi_server import (
     create_remote_peer,
     delete_remote_peer,
     service_action,
+    execute_on_server,
 )
 import crypto
 import aggregate
@@ -216,6 +218,14 @@ class PeerWithConfig(PeerResponse):
     config: str
     qr_code: str  # base64 PNG
 
+class ImportClientsResponse(BaseModel):
+    server_id: int
+    imported: int = 0
+    updated: int = 0
+    skipped: int = 0
+    total: int = 0
+    error: Optional[str] = None
+
 class TrafficMonth(BaseModel):
     year: int
     month: int
@@ -289,6 +299,7 @@ class ServerHealthResponse(BaseModel):
     peer_count: int = 0
     total_download: int = 0
     total_upload: int = 0
+    import_result: Optional[Dict] = None
 
 # ─── Auth ──────────────────────────────────────────────────────────────
 security = HTTPBearer()
@@ -468,6 +479,146 @@ def gen_client_config(peer: dict, server_pubkey: str) -> str:
     )
 
 # ─── Парсинг awg show all dump ─────────────────────────────────────────
+
+
+def _parse_client_conf_text(conf_text: str) -> dict:
+    """Parse an existing client .conf file for importing into panel DB."""
+    section = None
+    iface = {}
+    peer = {}
+    for raw in conf_text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith('#'):
+            continue
+        if line == '[Interface]':
+            section = 'interface'
+            continue
+        if line == '[Peer]':
+            section = 'peer'
+            continue
+        if '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        key, value = key.strip(), value.strip()
+        if section == 'interface':
+            iface[key] = value
+        elif section == 'peer':
+            peer[key] = value
+    address = iface.get('Address', '').split(',')[0].strip()
+    if '/' in address:
+        address = address.split('/')[0]
+    return {
+        'private_key': iface.get('PrivateKey', ''),
+        'preshared_key': peer.get('PresharedKey', ''),
+        'ip_address': address,
+    }
+
+
+def _existing_client_dirs(container: str) -> List[str]:
+    """Known client config directories for panel-created and fleet AWG stacks."""
+    dirs = []
+    if container == 'amnezia-awg2-direct':
+        dirs.append('/opt/amnezia/state/amnezia-awg2-direct/clients')
+    if container == 'amnezia-awg2':
+        dirs.append('/opt/amnezia/state/amnezia-awg2/clients')
+    dirs.extend([
+        f'/opt/amnezia/state/{container}/clients',
+        '/opt/amnezia/awg/clients',
+        '/data/clients',
+    ])
+    result = []
+    seen = set()
+    for item in dirs:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
+def import_existing_clients_from_server(server_row: dict) -> dict:
+    """Import existing client .conf files from a remote/local AWG server.
+
+    Runtime `awg show all dump` is useful for traffic, but it does not expose
+    client private keys/PSKs and may include the interface row. Existing deploys
+    persist importable client configs under `/opt/amnezia/state/.../clients`, so
+    those files are used as the source of truth for config downloads.
+    """
+    server_id = int(server_row.get('id') or 0)
+    if server_id <= 0:
+        return {'server_id': server_id, 'imported': 0, 'updated': 0, 'skipped': 0, 'total': 0}
+    container = server_row.get('amnezia_container') or 'awg-tunnel'
+    dirs = _existing_client_dirs(container)
+    find_cmd = 'for d in ' + ' '.join(shlex.quote(d) for d in dirs) + '; do [ -d "$d" ] && find "$d" -maxdepth 1 -type f -name "*.conf" -print; done'
+    rc, out, err = execute_on_server(server_row, find_cmd, timeout=20)
+    if rc != 0 and not out.strip():
+        return {'server_id': server_id, 'imported': 0, 'updated': 0, 'skipped': 0, 'total': 0, 'error': (err or '').strip()[:300]}
+    files = [line.strip() for line in out.splitlines() if line.strip().endswith('.conf')]
+    imported = updated = skipped = 0
+    conn = get_db()
+    try:
+        for conf_path in files:
+            rc, conf_text, err = execute_on_server(server_row, 'cat ' + shlex.quote(conf_path), timeout=15)
+            if rc != 0 or not conf_text.strip():
+                skipped += 1
+                continue
+            parsed = _parse_client_conf_text(conf_text)
+            if not parsed.get('private_key') or not parsed.get('preshared_key') or not parsed.get('ip_address'):
+                skipped += 1
+                continue
+            try:
+                public_key = subprocess.run(
+                    ['wg', 'pubkey'], input=parsed['private_key'], text=True,
+                    capture_output=True, check=True, timeout=5
+                ).stdout.strip()
+            except Exception:
+                skipped += 1
+                continue
+            peer_name = Path(conf_path).stem
+            existing = conn.execute(
+                'SELECT id FROM peers WHERE server_id=? AND public_key=?',
+                (server_id, public_key),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    'UPDATE peers SET name=?, private_key=?, preshared_key=?, ip_address=?, enabled=1 WHERE id=?',
+                    (peer_name, parsed['private_key'], parsed['preshared_key'], parsed['ip_address'], existing['id']),
+                )
+                updated += 1
+            else:
+                final_name = peer_name
+                if conn.execute('SELECT 1 FROM peers WHERE server_id=? AND name=?', (server_id, final_name)).fetchone():
+                    final_name = f"{peer_name}-{parsed['ip_address'].replace('.', '-')}"
+                conn.execute(
+                    'INSERT INTO peers (server_id, name, public_key, private_key, preshared_key, ip_address, enabled) VALUES (?,?,?,?,?,?,1)',
+                    (server_id, final_name, public_key, parsed['private_key'], parsed['preshared_key'], parsed['ip_address']),
+                )
+                imported += 1
+        conn.commit()
+    finally:
+        conn.close()
+    return {'server_id': server_id, 'imported': imported, 'updated': updated, 'skipped': skipped, 'total': len(files)}
+
+
+def _peer_config_response(peer: dict) -> dict:
+    server_row = _resolve_server(int(peer.get('server_id') or 0))
+    server_pubkey = get_server_pubkey(server_row) or get_server_public_key(server_row)
+    endpoint = server_row.get('endpoint') or os.getenv('AWG_ENDPOINT', 'vpn.example.com:51820')
+    config = gen_client_config_remote(peer['private_key'], peer['ip_address'], peer['preshared_key'], server_pubkey, endpoint)
+    return {
+        'id': peer['id'],
+        'name': peer['name'],
+        'public_key': peer['public_key'],
+        'ip_address': peer['ip_address'],
+        'enabled': bool(peer['enabled']),
+        'created_at': str(peer['created_at']),
+        'last_seen': str(peer['last_seen']) if peer.get('last_seen') else None,
+        'last_endpoint': peer.get('last_endpoint'),
+        'download_bytes': peer.get('download_bytes') or 0,
+        'upload_bytes': peer.get('upload_bytes') or 0,
+        'config': config,
+        'qr_code': make_qr(config),
+    }
+
 def parse_awg_dump() -> List[Dict]:
     """
     Парсит вывод `awg show all dump` через awg-tunnel контейнер.
@@ -845,6 +996,16 @@ def list_peers(server_id: Optional[int] = None, _: str = Depends(verify_token)):
         })
     return result
 
+
+@app.get("/api/peers/{peer_id}/config", response_model=PeerWithConfig)
+def get_peer_config(peer_id: int, _: str = Depends(verify_token)):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM peers WHERE id=?", (peer_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "Peer not found")
+    return _peer_config_response(dict(row))
+
 @app.post("/api/peers", response_model=PeerWithConfig)
 def create_peer(req: PeerCreate, server_id: int = 0, user: str = Depends(verify_token)):
     server_row = _resolve_server(server_id)
@@ -1163,8 +1324,14 @@ def create_server(req: ServerCreate, user: str = Depends(verify_token)):
     conn.commit()
     row = conn.execute("SELECT * FROM servers WHERE id=?", (server_id,)).fetchone()
     conn.close()
-    _write_audit(user, "create_server", req.name, f"host={req.host}:{req.port}")
-    return _server_to_response(row)
+    response = _server_to_response(row)
+    try:
+        imported = import_existing_clients_from_server(_resolve_server(server_id))
+        _write_audit(user, "import_clients", req.name, json.dumps(imported))
+    except Exception as e:
+        imported = {"error": str(e)}
+    _write_audit(user, "create_server", req.name, f"host={req.host}:{req.port}; import={imported}")
+    return response
 
 @app.get("/api/servers/{server_id}", response_model=ServerResponse)
 def get_server(server_id: int, _: str = Depends(verify_token)):
@@ -1246,6 +1413,8 @@ def test_server(server_id: int, user: str = Depends(verify_token)):
             health["peer_count"] = len(peers)
             health["total_download"] = sum(p["transfer_rx"] for p in peers)
             health["total_upload"] = sum(p["transfer_tx"] for p in peers)
+            if server_id > 0:
+                health["import_result"] = import_existing_clients_from_server(row)
         except Exception as e:
             health["error"] = str(e)
     try:
@@ -1271,6 +1440,22 @@ def test_server(server_id: int, user: str = Depends(verify_token)):
             notify.notify("server_up",
                 f"🟢 Сервер <b>{srv_name}</b> снова онлайн", server=srv_name)
     return health
+
+
+@app.post("/api/servers/{server_id}/import-clients", response_model=ImportClientsResponse)
+def import_server_clients(server_id: int, user: str = Depends(verify_token)):
+    if server_id == 0:
+        raise HTTPException(400, "Local server import is not supported")
+    row = _resolve_server(server_id)
+    result = import_existing_clients_from_server(row)
+    _write_audit(user, "import_clients", row.get("name"), json.dumps(result))
+    realtime.ws_manager.broadcast_async({
+        "event": "clients_imported",
+        "server": row.get("name"),
+        "server_id": server_id,
+        "result": result,
+    })
+    return result
 
 @app.post("/api/servers/{server_id}/action")
 def server_action(server_id: int, body: dict, user: str = Depends(verify_token)):
