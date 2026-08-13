@@ -59,3 +59,5 @@ def test_readme_documents_import_and_config_download():
     assert "Импорт существующих клиентов" in readme
     assert "/api/peers/{peer_id}/config" in readme
     assert "/api/servers/{server_id}/import-clients" in readme
+    assert "Jc, Jmin, Jmax" in readme
+    assert "plain WireGuard" in readme

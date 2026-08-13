@@ -4,7 +4,7 @@
 
 Веб-панель для тестового управления AmneziaWG/WireGuard-подобным VPN-контуром: локальный `awg-tunnel`, peer CRUD, QR/конфиги клиентов, traffic accounting, уведомления, WebSocket live-события и multi-server управление через SSH.
 
-![Version](https://img.shields.io/badge/version-1.1.6-blue)
+![Version](https://img.shields.io/badge/version-1.1.7-blue)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
@@ -20,6 +20,7 @@
 - Создание и удаление peer'ов.
 - Генерация private/public key и preshared key.
 - QR-код и `.conf` для импорта в AmneziaVPN/WireGuard-клиент.
+- AmneziaWG 2.0 client configs сохраняют параметры обфускации `Jc/Jmin/Jmax/S1/S2/H1-H4`, а не деградируют до обычного WireGuard.
 - Просмотр и скачивание `.conf` для уже существующих/импортированных клиентов по клику на строку клиента.
 - Включение/отключение peer'ов.
 - Учёт трафика peer'ов и логирование handshake-событий.
@@ -180,7 +181,7 @@ docker build -t ghcr.io/sllikmll/amnezia-panel:latest .
 
 | Переменная | Default | Назначение |
 |---|---|---|
-| `PANEL_VERSION` | `1.1.6` | текущая версия приложения |
+| `PANEL_VERSION` | `1.1.7` | текущая версия приложения |
 | `PANEL_REPO` | `sllikmll/amnezia-panel` | GitHub repo для latest release check |
 | `PANEL_IMAGE` | `ghcr.io/sllikmll/amnezia-panel:latest` | Docker image, который тянет updater |
 | `PANEL_CONTAINER_NAME` | `awg-panel` | имя контейнера панели |
@@ -247,7 +248,15 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8888/api/peers
 /opt/amnezia/state/<container>/clients/*.conf
 ```
 
-Это нужно потому, что `awg show all dump` показывает runtime peer'ы и трафик, но не содержит client private key/PSK, необходимых для повторной выдачи `.conf`.
+Это нужно потому, что `awg show all dump` показывает runtime peer'ы и трафик, но не содержит client private key/PSK и AmneziaWG 2.0 obfuscation fields, необходимых для повторной выдачи полноценного `.conf`.
+
+Импорт сохраняет AWG2 параметры интерфейса:
+
+```text
+Jc, Jmin, Jmax, S1, S2, H1, H2, H3, H4
+```
+
+При открытии или скачивании клиента панель отдаёт именно AmneziaWG 2.0 config с этими полями в `[Interface]`, а не plain WireGuard config.
 
 На вкладке **Серверы** есть кнопки:
 
@@ -268,6 +277,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8888/api/peers
 - `/api/servers` отдаёт только `has_password` / `has_key`, не сами credentials.
 - `/api/peers` не отдаёт private key и PSK в списке.
 - Полный клиентский `.conf` отдаётся только авторизованным запросом `GET /api/peers/{peer_id}/config`.
+- AWG2 obfuscation fields не являются секретами уровня private key, но входят в полный client config и не отдаются в списочном `/api/peers`.
 - Compose не содержит тестовый пароль или захардкоженный JWT secret.
 
 Что ещё нужно для production:

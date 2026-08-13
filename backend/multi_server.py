@@ -292,8 +292,9 @@ def get_server_pubkey(row: Dict) -> str:
 
 
 def create_remote_peer(row: Dict, name: str, ip_address: str,
-                       public_key: str, private_key: str, psk: str) -> bool:
-    """Создаёт peer на удалённом сервере через awg syncconf."""
+                       public_key: str, private_key: str, psk: str,
+                       client_config: Optional[str] = None) -> bool:
+    """Создаёт peer на удалённом сервере и сохраняет importable client .conf."""
     is_local = row.get("id") == 0
     conf = (
         f"[Peer]\n"
@@ -310,6 +311,13 @@ def create_remote_peer(row: Dict, name: str, ip_address: str,
                 ["docker", "exec", "-i", container, "/usr/local/bin/awg", "syncconf", "awg0"],
                 input=conf, text=True, capture_output=True, timeout=10
             )
+            if proc.returncode != 0:
+                return False
+            if client_config:
+                clients_dir = f"/opt/amnezia/state/{container}/clients"
+                Path(clients_dir).mkdir(parents=True, exist_ok=True)
+                safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name) or "client"
+                Path(clients_dir, f"{safe_name}.conf").write_text(client_config)
         else:
             with from_server_row(row) as ssh:
                 # Пишем conf в файл через heredoc
@@ -320,6 +328,15 @@ EOF"""
                 if rc != 0:
                     print(f"syncconf failed: {err}", file=__import__("sys").stderr)
                     return False
+                if client_config:
+                    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name) or "client"
+                    clients_dir = f"/opt/amnezia/state/{container}/clients"
+                    rc2, _, err2 = ssh.exec(
+                        f"mkdir -p {_shell_quote(clients_dir)} && cat > {_shell_quote(clients_dir + '/' + safe_name + '.conf')} <<'EOF_CLIENT'\n{client_config}\nEOF_CLIENT\n",
+                        timeout=15,
+                    )
+                    if rc2 != 0:
+                        print(f"write client config failed: {err2}", file=__import__("sys").stderr)
         return True
     except Exception as e:
         print(f"create_remote_peer error: {e}", file=__import__("sys").stderr)

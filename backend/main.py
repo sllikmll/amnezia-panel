@@ -60,7 +60,7 @@ SECRET_KEY = os.getenv("PANEL_SECRET_KEY", secrets.token_urlsafe(32))
 JWT_ALG = "HS256"
 JWT_HOURS = 24
 TRAFFIC_COLLECT_INTERVAL = int(os.getenv("TRAFFIC_INTERVAL", "300"))  # 5 минут
-APP_VERSION = os.getenv("PANEL_VERSION", "1.1.6").lstrip("v")
+APP_VERSION = os.getenv("PANEL_VERSION", "1.1.7").lstrip("v")
 PANEL_REPO = os.getenv("PANEL_REPO", "sllikmll/amnezia-panel")
 PANEL_IMAGE = os.getenv("PANEL_IMAGE", "ghcr.io/sllikmll/amnezia-panel:latest")
 PANEL_UPDATE_COMMAND = os.getenv("PANEL_UPDATE_COMMAND", "/usr/local/bin/update-panel")
@@ -86,6 +86,7 @@ def init_db():
             upload_bytes INTEGER DEFAULT 0,
             last_seen TIMESTAMP,
             last_endpoint TEXT,
+            awg_fields TEXT,
             UNIQUE(server_id, name),
             UNIQUE(server_id, public_key)
         );
@@ -180,6 +181,7 @@ def init_db():
     for table, column, default in [
         ("peers", "last_endpoint", "TEXT"),
         ("peers", "server_id", "INTEGER NOT NULL DEFAULT 0"),
+        ("peers", "awg_fields", "TEXT"),
     ]:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {default}")
@@ -449,17 +451,32 @@ def wg_sync_conf(peer: dict, remove: bool = False):
             except Exception as e2:
                 print(f"awg set fallback error: {e2}", file=sys.stderr)
 
-def gen_client_config_remote(private_key: str, ip: str, psk: str, server_pubkey: str, endpoint: str) -> str:
+AWG_OBFUSCATION_FIELDS = ("Jc", "Jmin", "Jmax", "S1", "S2", "H1", "H2", "H3", "H4")
+
+
+def _format_awg_fields(awg_fields: Optional[dict]) -> str:
+    if not awg_fields:
+        return ""
+    lines = []
+    for key in AWG_OBFUSCATION_FIELDS:
+        value = awg_fields.get(key)
+        if value is not None and str(value).strip() != "":
+            lines.append(f"{key} = {str(value).strip()}")
+    return ("\n" + "\n".join(lines)) if lines else ""
+
+
+def gen_client_config_remote(private_key: str, ip: str, psk: str, server_pubkey: str, endpoint: str, awg_fields: Optional[dict] = None) -> str:
     return (
         "[Interface]\n"
         f"PrivateKey = {private_key}\n"
         f"Address = {ip}/32\n"
-        f"DNS = 1.1.6.1, 8.8.8.8\n"
+        f"DNS = 1.1.1.1, 8.8.8.8"
+        f"{_format_awg_fields(awg_fields)}\n"
         "\n[Peer]\n"
         f"PublicKey = {server_pubkey}\n"
         f"PresharedKey = {psk}\n"
         f"Endpoint = {endpoint}\n"
-        "AllowedIPs = 0.0.0.0/0, ::/0\n"
+        "AllowedIPs = 0.0.0.0/0\n"
         "PersistentKeepalive = 25\n"
     )
 
@@ -469,12 +486,13 @@ def gen_client_config(peer: dict, server_pubkey: str) -> str:
         "[Interface]\n"
         f"PrivateKey = {peer['private_key']}\n"
         f"Address = {peer['ip_address']}/32\n"
-        f"DNS = 1.1.6.1, 8.8.8.8\n"
+        f"DNS = 1.1.1.1, 8.8.8.8"
+        f"{_format_awg_fields(peer.get('awg_fields'))}\n"
         "\n[Peer]\n"
         f"PublicKey = {server_pubkey}\n"
         f"PresharedKey = {peer['preshared_key']}\n"
         f"Endpoint = {endpoint}\n"
-        "AllowedIPs = 0.0.0.0/0, ::/0\n"
+        "AllowedIPs = 0.0.0.0/0\n"
         "PersistentKeepalive = 25\n"
     )
 
@@ -507,10 +525,12 @@ def _parse_client_conf_text(conf_text: str) -> dict:
     address = iface.get('Address', '').split(',')[0].strip()
     if '/' in address:
         address = address.split('/')[0]
+    awg_fields = {key: iface[key] for key in AWG_OBFUSCATION_FIELDS if iface.get(key)}
     return {
         'private_key': iface.get('PrivateKey', ''),
         'preshared_key': peer.get('PresharedKey', ''),
         'ip_address': address,
+        'awg_fields': awg_fields,
     }
 
 
@@ -580,8 +600,8 @@ def import_existing_clients_from_server(server_row: dict) -> dict:
             ).fetchone()
             if existing:
                 conn.execute(
-                    'UPDATE peers SET name=?, private_key=?, preshared_key=?, ip_address=?, enabled=1 WHERE id=?',
-                    (peer_name, parsed['private_key'], parsed['preshared_key'], parsed['ip_address'], existing['id']),
+                    'UPDATE peers SET name=?, private_key=?, preshared_key=?, ip_address=?, awg_fields=?, enabled=1 WHERE id=?',
+                    (peer_name, parsed['private_key'], parsed['preshared_key'], parsed['ip_address'], json.dumps(parsed.get('awg_fields') or {}, sort_keys=True), existing['id']),
                 )
                 updated += 1
             else:
@@ -589,8 +609,8 @@ def import_existing_clients_from_server(server_row: dict) -> dict:
                 if conn.execute('SELECT 1 FROM peers WHERE server_id=? AND name=?', (server_id, final_name)).fetchone():
                     final_name = f"{peer_name}-{parsed['ip_address'].replace('.', '-')}"
                 conn.execute(
-                    'INSERT INTO peers (server_id, name, public_key, private_key, preshared_key, ip_address, enabled) VALUES (?,?,?,?,?,?,1)',
-                    (server_id, final_name, public_key, parsed['private_key'], parsed['preshared_key'], parsed['ip_address']),
+                    'INSERT INTO peers (server_id, name, public_key, private_key, preshared_key, ip_address, awg_fields, enabled) VALUES (?,?,?,?,?,?,?,1)',
+                    (server_id, final_name, public_key, parsed['private_key'], parsed['preshared_key'], parsed['ip_address'], json.dumps(parsed.get('awg_fields') or {}, sort_keys=True)),
                 )
                 imported += 1
         conn.commit()
@@ -603,7 +623,11 @@ def _peer_config_response(peer: dict) -> dict:
     server_row = _resolve_server(int(peer.get('server_id') or 0))
     server_pubkey = get_server_pubkey(server_row) or get_server_public_key(server_row)
     endpoint = server_row.get('endpoint') or os.getenv('AWG_ENDPOINT', 'vpn.example.com:51820')
-    config = gen_client_config_remote(peer['private_key'], peer['ip_address'], peer['preshared_key'], server_pubkey, endpoint)
+    try:
+        awg_fields = json.loads(peer.get('awg_fields') or '{}')
+    except Exception:
+        awg_fields = {}
+    config = gen_client_config_remote(peer['private_key'], peer['ip_address'], peer['preshared_key'], server_pubkey, endpoint, awg_fields=awg_fields)
     return {
         'id': peer['id'],
         'name': peer['name'],
@@ -618,6 +642,27 @@ def _peer_config_response(peer: dict) -> dict:
         'config': config,
         'qr_code': make_qr(config),
     }
+
+
+
+def get_server_awg_fields(server_row: dict) -> dict:
+    """Read AWG2 obfuscation parameters from the server interface config."""
+    container = server_row.get('amnezia_container') or 'awg-tunnel'
+    candidates = [
+        f"/opt/amnezia/state/{container}/awg0.conf",
+        f"/opt/amnezia/state/{container}/awgdir0.conf",
+        "/opt/amnezia/state/amnezia-awg2-direct/awgdir0.conf",
+        "/opt/amnezia/state/amnezia-awg2/awg0.conf",
+        "/data/awg0.conf",
+    ]
+    cmd = 'for f in ' + ' '.join(shlex.quote(x) for x in candidates) + '; do [ -f "$f" ] && { cat "$f"; exit 0; }; done; exit 1'
+    try:
+        rc, out, _ = execute_on_server(server_row, cmd, timeout=15)
+        if rc == 0 and out:
+            return _parse_client_conf_text(out).get('awg_fields') or {}
+    except Exception:
+        pass
+    return {}
 
 def parse_awg_dump() -> List[Dict]:
     """
@@ -1026,16 +1071,21 @@ def create_peer(req: PeerCreate, server_id: int = 0, user: str = Depends(verify_
         conn.close()
         raise HTTPException(500, "No available IPs")
 
+    awg_fields = get_server_awg_fields(server_row)
     conn.execute(
-        "INSERT INTO peers (server_id, name, public_key, private_key, preshared_key, ip_address) VALUES (?,?,?,?,?,?)",
-        (server_id, req.name, pub, priv, psk, ip)
+        "INSERT INTO peers (server_id, name, public_key, private_key, preshared_key, ip_address, awg_fields) VALUES (?,?,?,?,?,?,?)",
+        (server_id, req.name, pub, priv, psk, ip, json.dumps(awg_fields, sort_keys=True))
     )
     conn.commit()
     conn.close()
 
-    # Создаём peer на сервере (локально или удалённо)
+    server_pubkey = get_server_pubkey(server_row) or get_server_public_key(server_row)
+    endpoint = server_row.get("endpoint") or os.getenv("AWG_ENDPOINT", "vpn.example.com:51820")
+    config = gen_client_config_remote(priv, ip, psk, server_pubkey, endpoint, awg_fields=awg_fields)
+
+    # Создаём peer на сервере (локально или удалённо) и сохраняем AWG2 client config.
     remote_ok = create_remote_peer(
-        server_row, req.name, ip, pub, priv, psk
+        server_row, req.name, ip, pub, priv, psk, client_config=config
     )
     if not remote_ok:
         # Если не получилось на сервере — откатываем БД
@@ -1045,9 +1095,6 @@ def create_peer(req: PeerCreate, server_id: int = 0, user: str = Depends(verify_
         conn.close()
         raise HTTPException(500, "Failed to create peer on target server")
 
-    server_pubkey = get_server_pubkey(server_row) or get_server_public_key()
-    endpoint = server_row.get("endpoint") or os.getenv("AWG_ENDPOINT", "vpn.example.com:51820")
-    config = gen_client_config_remote(priv, ip, psk, server_pubkey, endpoint)
     qr_b64 = make_qr(config)
 
     _write_audit(user, "create_peer", f"server={server_row.get('name')}/peer={req.name}")
