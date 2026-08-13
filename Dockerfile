@@ -30,7 +30,7 @@ COPY deploy/update-panel.sh /usr/local/bin/update-panel
 RUN chmod +x /usr/local/bin/update-panel
 
 ENV PANEL_PORT=8080 \
-    PANEL_VERSION=1.1.7 \
+    PANEL_VERSION=1.1.8 \
     PANEL_REPO=sllikmll/amnezia-panel \
     PANEL_IMAGE=ghcr.io/sllikmll/amnezia-panel:latest \
     PANEL_CONTAINER_NAME=awg-panel \

@@ -4,7 +4,7 @@
 
 Веб-панель для тестового управления AmneziaWG/WireGuard-подобным VPN-контуром: локальный `awg-tunnel`, peer CRUD, QR/конфиги клиентов, traffic accounting, уведомления, WebSocket live-события и multi-server управление через SSH.
 
-![Version](https://img.shields.io/badge/version-1.1.7-blue)
+![Version](https://img.shields.io/badge/version-1.1.8-blue)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
@@ -22,6 +22,7 @@
 - QR-код и `.conf` для импорта в AmneziaVPN/WireGuard-клиент.
 - AmneziaWG 2.0 client configs сохраняют параметры обфускации `Jc/Jmin/Jmax/S1/S2/H1-H4`, а не деградируют до обычного WireGuard.
 - Просмотр и скачивание `.conf` для уже существующих/импортированных клиентов по клику на строку клиента.
+- Компактные кнопки действий в таблицах клиентов и серверов без переноса строк и раздувания высоты таблицы.
 - Включение/отключение peer'ов.
 - Учёт трафика peer'ов и логирование handshake-событий.
 
@@ -181,7 +182,7 @@ docker build -t ghcr.io/sllikmll/amnezia-panel:latest .
 
 | Переменная | Default | Назначение |
 |---|---|---|
-| `PANEL_VERSION` | `1.1.7` | текущая версия приложения |
+| `PANEL_VERSION` | `1.1.8` | текущая версия приложения |
 | `PANEL_REPO` | `sllikmll/amnezia-panel` | GitHub repo для latest release check |
 | `PANEL_IMAGE` | `ghcr.io/sllikmll/amnezia-panel:latest` | Docker image, который тянет updater |
 | `PANEL_CONTAINER_NAME` | `awg-panel` | имя контейнера панели |

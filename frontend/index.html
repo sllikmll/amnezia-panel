@@ -54,6 +54,11 @@
   button.danger { background: linear-gradient(135deg, #fb7185, #f43f5e); color: #fff; }
   button.warning { background: linear-gradient(135deg, #fbbf24, #22d3ee); color: #06111f; }
   button:disabled { background: #263447; color: var(--muted2); cursor: not-allowed; transform: none; box-shadow: none; }
+  .actions-cell { display: flex; align-items: center; gap: 7px; flex-wrap: nowrap; white-space: nowrap; min-width: max-content; }
+  .btn-small { min-height: 34px; padding: 7px 11px; margin: 0; border-radius: 10px; font-size: 12px; line-height: 1; box-shadow: none; }
+  .btn-icon { width: 34px; min-width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center; margin: 0; border-radius: 10px; font-size: 13px; }
+  .btn-danger-icon { width: 34px; min-width: 34px; height: 34px; padding: 0; margin: 0; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; }
+  td.actions-td { width: 1%; white-space: nowrap; }
   table { width: 100%; border-collapse: collapse; margin-top: 20px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: 0 16px 45px rgba(0,0,0,.18); }
   th, td { padding: 13px 15px; text-align: left; border-bottom: 1px solid rgba(125,211,252,.09); }
   th { background: rgba(18, 35, 59, .98); color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
@@ -712,10 +717,12 @@ async function loadPeers() {
         <td>${fmtTime(p.last_seen)}</td>
         <td><code>${p.last_endpoint || '—'}</code></td>
         <td>${fmtTime(p.created_at)}</td>
-        <td>
-          <button class="secondary" onclick="event.stopPropagation(); showPeerConfig(${p.id})">Конфиг</button>
-          <button class="secondary" onclick="event.stopPropagation(); togglePeer(${p.id})">${p.enabled ? 'Выкл' : 'Вкл'}</button>
-          <button class="danger" onclick="event.stopPropagation(); deletePeer(${p.id})">🗑</button>
+        <td class="actions-td">
+          <div class="actions-cell">
+            <button class="secondary btn-small" onclick="event.stopPropagation(); showPeerConfig(${p.id})">Конфиг</button>
+            <button class="secondary btn-small" onclick="event.stopPropagation(); togglePeer(${p.id})">${p.enabled ? 'Выкл' : 'Вкл'}</button>
+            <button class="danger btn-danger-icon" title="Удалить" onclick="event.stopPropagation(); deletePeer(${p.id})">🗑</button>
+          </div>
         </td>
       </tr>
     `}).join('');
@@ -965,11 +972,13 @@ async function loadServers() {
         <td><code>${s.endpoint || '—'}</code></td>
         <td><span class="${statusClass}">${s.status}</span></td>
         <td>${s.last_check ? fmtTime(s.last_check) : '—'}</td>
-        <td>
-          <button class="secondary" onclick="testServer(${s.id})">Тест</button>
-          ${!isLocal ? `<button class="secondary" onclick="importServerClients(${s.id})">Клиенты</button>` : ''}
-          ${!isLocal ? `<button class="secondary" onclick="serverAction(${s.id},'restart')">⟳</button>` : ''}
-          ${!isLocal ? `<button class="danger" onclick="deleteServer(${s.id})">🗑</button>` : ''}
+        <td class="actions-td">
+          <div class="actions-cell">
+            <button class="secondary btn-small" onclick="testServer(${s.id})">Тест</button>
+            ${!isLocal ? `<button class="secondary btn-small" onclick="importServerClients(${s.id})">Клиенты</button>` : ''}
+            ${!isLocal ? `<button class="secondary btn-icon" title="Перезапустить" onclick="serverAction(${s.id},'restart')">⟳</button>` : ''}
+            ${!isLocal ? `<button class="danger btn-danger-icon" title="Удалить" onclick="deleteServer(${s.id})">🗑</button>` : ''}
+          </div>
         </td>
       </tr>
     `}).join('');

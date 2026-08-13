@@ -61,3 +61,14 @@ def test_readme_documents_import_and_config_download():
     assert "/api/servers/{server_id}/import-clients" in readme
     assert "Jc, Jmin, Jmax" in readme
     assert "plain WireGuard" in readme
+
+
+def test_action_buttons_are_compact_and_do_not_wrap():
+    html = _html()
+    assert ".actions-cell" in html
+    assert ".btn-small" in html
+    assert ".btn-icon" in html
+    assert "td.actions-td" in html
+    assert 'class="actions-td"' in html
+    assert "secondary btn-small" in html
+    assert "danger btn-danger-icon" in html
