@@ -18,10 +18,19 @@ def _html() -> str:
 def test_backend_imports_existing_clients_from_server_configs():
     src = _main()
     assert "def import_existing_clients_from_server" in src
+    assert "/opt/amnezia/clients" in src
     assert "/opt/amnezia/state/amnezia-awg2-direct/clients" in src
     assert "/opt/amnezia/state/amnezia-awg2/clients" in src
-    assert "execute_on_server(server_row, 'cat ' + shlex.quote(conf_path)" in src
+    assert "__AWGCONF__" in src
     assert "wg', 'pubkey'" in src
+
+
+def test_client_import_batches_all_configs_into_one_ssh_command():
+    src = _main()
+    section = src[src.index("def import_existing_clients_from_server"):src.index("def _peer_config_response")]
+    assert "__AWGCONF__" in section
+    assert "base64" in section
+    assert section.count("execute_on_server(") == 1
 
 
 def test_server_create_and_manual_import_endpoint_exist():

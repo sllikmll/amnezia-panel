@@ -4,7 +4,7 @@
 
 Веб-панель для тестового управления AmneziaWG/WireGuard-подобным VPN-контуром: локальный `awg-tunnel`, peer CRUD, QR/конфиги клиентов, traffic accounting, уведомления, WebSocket live-события и multi-server управление через SSH.
 
-![Version](https://img.shields.io/badge/version-1.1.8-blue)
+![Version](https://img.shields.io/badge/version-1.1.9-blue)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
@@ -20,7 +20,7 @@
 - Создание и удаление peer'ов.
 - Генерация private/public key и preshared key.
 - QR-код и `.conf` для импорта в AmneziaVPN/WireGuard-клиент.
-- AmneziaWG 2.0 client configs сохраняют параметры обфускации `Jc/Jmin/Jmax/S1/S2/H1-H4`, а не деградируют до обычного WireGuard.
+- AmneziaWG 2.0 client configs сохраняют параметры обфускации `Jc/Jmin/Jmax/S1/S2/S3/S4/H1-H4`, а не деградируют до обычного WireGuard.
 - Просмотр и скачивание `.conf` для уже существующих/импортированных клиентов по клику на строку клиента.
 - Компактные кнопки действий в таблицах клиентов и серверов без переноса строк и раздувания высоты таблицы.
 - Включение/отключение peer'ов.
@@ -33,6 +33,8 @@
 - Проверка удалённых Docker/AmneziaWG контейнеров.
 - `start` / `stop` / `restart` удалённого контейнера.
 - Импорт существующих клиентов из `clients/*.conf` при добавлении сервера и вручную кнопкой **Обновить клиентов**.
+- Batch-import всех `.conf` за одну SSH-сессию: панель не создаёт отдельное соединение на каждый клиент и не упирается в SSH `MaxStartups`.
+- Fleet-mode `PANEL_SHOW_LOCAL_SERVER=false`: встроенный pseudo-server `local` не дублирует явно добавленный VPS в списке и статистике.
 - Сводная статистика по серверам.
 
 ### Уведомления и realtime
@@ -141,6 +143,7 @@ http://<server-ip>:8888/
 
 ```text
 ghcr.io/sllikmll/amnezia-panel:latest
+ghcr.io/sllikmll/amnezia-panel:v1.1.9
 ```
 
 Сборка вручную:
@@ -160,6 +163,7 @@ docker build -t ghcr.io/sllikmll/amnezia-panel:latest .
 | `PANEL_SECRET_KEY` | JWT signing secret, должен быть постоянным | `openssl rand -hex 32` |
 | `PANEL_ENCRYPTION_KEY` | Fernet key для SSH credentials; если пусто — создаётся `/data/encryption.key` | `python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'` |
 | `PANEL_PORT` | порт web-панели | `8888` |
+| `PANEL_SHOW_LOCAL_SERVER` | показывать встроенный pseudo-server `local`; для fleet-панели с явно добавленным управляющим VPS используйте `false` | `true` |
 | `AWG_DATA_DIR` | каталог данных на хосте/volume | `/data/awg` |
 | `AWG_DB_PATH` | SQLite DB path внутри контейнера | `/data/panel.db` |
 | `AWG_CONFIG_PATH` | локальный AWG config path | `/data/awg0.conf` |
@@ -182,7 +186,7 @@ docker build -t ghcr.io/sllikmll/amnezia-panel:latest .
 
 | Переменная | Default | Назначение |
 |---|---|---|
-| `PANEL_VERSION` | `1.1.8` | текущая версия приложения |
+| `PANEL_VERSION` | `1.1.9` | текущая версия приложения |
 | `PANEL_REPO` | `sllikmll/amnezia-panel` | GitHub repo для latest release check |
 | `PANEL_IMAGE` | `ghcr.io/sllikmll/amnezia-panel:latest` | Docker image, который тянет updater |
 | `PANEL_CONTAINER_NAME` | `awg-panel` | имя контейнера панели |
@@ -193,6 +197,66 @@ docker build -t ghcr.io/sllikmll/amnezia-panel:latest .
 ```yaml
 - /var/run/docker.sock:/var/run/docker.sock
 ```
+
+## Проверенная раскладка AmneziaWG 2.0
+
+Панель `v1.1.9` протестирована с текущим Docker-образом AWG2:
+
+| Параметр | Значение |
+|---|---|
+| Source runtime | [amnezia-vpn/amneziawg-go](https://github.com/amnezia-vpn/amneziawg-go) |
+| Docker image | `amnezia-awg2` |
+| Container name | `amnezia-awg2` |
+| `amneziawg-tools` | `v3.1.20260812` |
+| `amneziawg-go` | `0.0.20250522` |
+| Runtime binary | `/usr/bin/amneziawg-go` |
+| Runtime binary SHA-256 | `6d96502ebd9ed6f9d17bdecd637cba7502c9960fed1b6922b3882784417a036d` |
+| Interface | `awg0` |
+| Server config in container | `/opt/amnezia/awg/awg0.conf` |
+| Client configs in container | `/opt/amnezia/clients/*.conf` |
+| Restart policy | `unless-stopped` |
+
+В проверенной установке `/opt/amnezia/awg` и `/opt/amnezia/clients` находятся в writable layer контейнера: они переживают `docker restart`, restart Docker и reboot VPS, но **не переживут удаление/recreate контейнера**. Для recreate-safe установки вынесите эти каталоги в bind mount/volume либо собирайте собственный image с нужным state. Единственный обнаруженный bind mount текущего AWG2-контейнера — `/lib/modules:/lib/modules`.
+
+### Проверенный fleet
+
+| VPS | AWG subnet | UDP port |
+|---|---:|---:|
+| `msk` | `10.8.1.0/24` | `33415` |
+| `amst` | `10.8.2.0/24` | `35335` |
+| `amstnew` | `10.8.3.0/24` | `36853` |
+| `admpol` | `10.8.4.0/24` | `35666` |
+| `admger` | `10.8.5.0/24` | `37030` |
+| `admfin` | `10.8.6.0/24` | `35146` |
+| `veesplv` | `10.8.7.0/24` | `30278` |
+| `veespsw` | `10.8.8.0/24` | `46600` |
+
+На каждом VPS проверено 12 runtime peers и 12 persisted client configs. Имена должны быть глобально уникальными и содержать VPS suffix:
+
+```text
+1-keenetic-<vps>
+2-openwrt-<vps>
+3-mikrotik-<vps>
+...
+12-test-<vps>
+```
+
+WireGuard/AWG runtime не хранит peer name как протокольное поле. Панель получает имя из stem клиентского файла, поэтому файл на сервере должен называться, например, `/opt/amnezia/clients/1-keenetic-msk.conf`. Для читаемости такой же label можно хранить комментарием перед `[Peer]` в `awg0.conf`.
+
+### Проверенная production-панель
+
+```text
+URL: https://3xmsk.dogonin.ru:8888/
+Panel image: ghcr.io/sllikmll/amnezia-panel:v1.1.9
+Panel container: awg-panel
+TLS proxy container: awg-panel-proxy
+Compose: /root/docker/amnezia-panel/compose.yaml
+Source checkout: /root/docker/amnezia-panel/src
+Persistent panel data: /root/docker/amnezia-panel/data → /data
+SQLite: /root/docker/amnezia-panel/data/panel.db → /data/panel.db
+```
+
+В fleet deployment используется `PANEL_SHOW_LOCAL_SERVER=false`, чтобы явно добавленный `msk` не дублировался встроенным pseudo-server `local`. Проверенный результат: 8 серверов, 8 online, 96 уникально именованных клиентов и полный AWG2 export с `Jc/Jmin/Jmax/S1-S4/H1-H4`.
 
 
 ## API
@@ -244,6 +308,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8888/api/peers
 При добавлении удалённого сервера панель автоматически пытается импортировать уже созданных клиентов из persisted конфигов:
 
 ```text
+/opt/amnezia/clients/*.conf
 /opt/amnezia/state/amnezia-awg2-direct/clients/*.conf
 /opt/amnezia/state/amnezia-awg2/clients/*.conf
 /opt/amnezia/state/<container>/clients/*.conf
@@ -254,7 +319,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8888/api/peers
 Импорт сохраняет AWG2 параметры интерфейса:
 
 ```text
-Jc, Jmin, Jmax, S1, S2, H1, H2, H3, H4
+Jc, Jmin, Jmax, S1, S2, S3, S4, H1, H2, H3, H4
 ```
 
 При открытии или скачивании клиента панель отдаёт именно AmneziaWG 2.0 config с этими полями в `[Interface]`, а не plain WireGuard config.

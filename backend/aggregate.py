@@ -53,18 +53,21 @@ def _collect_server_stats(server_row: dict) -> Optional[Dict]:
 
 
 def get_db_servers() -> List[dict]:
-    """Возвращает список всех серверов (локальный + удалённые) с расшифрованными credentials."""
+    """Возвращает серверы из БД и опциональный локальный pseudo-server."""
     import os
     from main import get_db  # late import to avoid circular
-    # Локальный сервер
-    result = [{
-        "id": 0, "name": "local", "host": "127.0.0.1", "port": 22,
-        "username": "root", "auth_type": "password",
-        "password": None, "key_path": None, "key_data": None,
-        "amnezia_container": "awg-tunnel", "amnezia_iface": "awg0",
-        "listen_port": int(os.getenv("AWG_LISTEN_PORT", "51820")),
-        "endpoint": os.getenv("AWG_ENDPOINT"),
-    }]
+    show_local = os.getenv("PANEL_SHOW_LOCAL_SERVER", "true").lower() in {"1", "true", "yes", "on"}
+    result = []
+    if show_local:
+        result.append({
+            "id": 0, "name": "local", "host": "127.0.0.1", "port": 22,
+            "username": "root", "auth_type": "password",
+            "password": None, "key_path": None, "key_data": None,
+            "amnezia_container": os.getenv("AWG_CONTAINER", "awg-tunnel"),
+            "amnezia_iface": os.getenv("AWG_INTERFACE", "awg0"),
+            "listen_port": int(os.getenv("AWG_LISTEN_PORT", "51820")),
+            "endpoint": os.getenv("AWG_ENDPOINT"),
+        })
     conn = get_db()
     rows = conn.execute("SELECT * FROM servers ORDER BY id").fetchall()
     conn.close()

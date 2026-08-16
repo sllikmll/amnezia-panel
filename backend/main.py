@@ -60,7 +60,8 @@ SECRET_KEY = os.getenv("PANEL_SECRET_KEY", secrets.token_urlsafe(32))
 JWT_ALG = "HS256"
 JWT_HOURS = 24
 TRAFFIC_COLLECT_INTERVAL = int(os.getenv("TRAFFIC_INTERVAL", "300"))  # 5 минут
-APP_VERSION = os.getenv("PANEL_VERSION", "1.1.8").lstrip("v")
+APP_VERSION = os.getenv("PANEL_VERSION", "1.1.9").lstrip("v")
+SHOW_LOCAL_SERVER = os.getenv("PANEL_SHOW_LOCAL_SERVER", "true").lower() in {"1", "true", "yes", "on"}
 PANEL_REPO = os.getenv("PANEL_REPO", "sllikmll/amnezia-panel")
 PANEL_IMAGE = os.getenv("PANEL_IMAGE", "ghcr.io/sllikmll/amnezia-panel:latest")
 PANEL_UPDATE_COMMAND = os.getenv("PANEL_UPDATE_COMMAND", "/usr/local/bin/update-panel")
@@ -451,7 +452,7 @@ def wg_sync_conf(peer: dict, remove: bool = False):
             except Exception as e2:
                 print(f"awg set fallback error: {e2}", file=sys.stderr)
 
-AWG_OBFUSCATION_FIELDS = ("Jc", "Jmin", "Jmax", "S1", "S2", "H1", "H2", "H3", "H4")
+AWG_OBFUSCATION_FIELDS = ("Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4", "H1", "H2", "H3", "H4")
 
 
 def _format_awg_fields(awg_fields: Optional[dict]) -> str:
@@ -542,6 +543,7 @@ def _existing_client_dirs(container: str) -> List[str]:
     if container == 'amnezia-awg2':
         dirs.append('/opt/amnezia/state/amnezia-awg2/clients')
     dirs.extend([
+        '/opt/amnezia/clients',
         f'/opt/amnezia/state/{container}/clients',
         '/opt/amnezia/awg/clients',
         '/data/clients',
@@ -553,6 +555,11 @@ def _existing_client_dirs(container: str) -> List[str]:
             seen.add(item)
             result.append(item)
     return result
+
+
+def _docker_exec_shell(container: str, script: str) -> str:
+    """Execute a shell fragment inside the selected remote AWG container."""
+    return f"docker exec {shlex.quote(container)} sh -lc {shlex.quote(script)}"
 
 
 def import_existing_clients_from_server(server_row: dict) -> dict:
@@ -568,17 +575,31 @@ def import_existing_clients_from_server(server_row: dict) -> dict:
         return {'server_id': server_id, 'imported': 0, 'updated': 0, 'skipped': 0, 'total': 0}
     container = server_row.get('amnezia_container') or 'awg-tunnel'
     dirs = _existing_client_dirs(container)
-    find_cmd = 'for d in ' + ' '.join(shlex.quote(d) for d in dirs) + '; do [ -d "$d" ] && find "$d" -maxdepth 1 -type f -name "*.conf" -print; done'
-    rc, out, err = execute_on_server(server_row, find_cmd, timeout=20)
+    batch_inner = (
+        'for d in ' + ' '.join(shlex.quote(d) for d in dirs) +
+        '; do [ -d "$d" ] || continue; for f in "$d"/*.conf; do '
+        '[ -f "$f" ] || continue; printf "__AWGCONF__\\t%s\\t" "$f"; '
+        'base64 "$f" | tr -d "\\n"; printf "\\n"; done; done'
+    )
+    batch_cmd = _docker_exec_shell(container, batch_inner)
+    rc, out, err = execute_on_server(server_row, batch_cmd, timeout=30)
     if rc != 0 and not out.strip():
         return {'server_id': server_id, 'imported': 0, 'updated': 0, 'skipped': 0, 'total': 0, 'error': (err or '').strip()[:300]}
-    files = [line.strip() for line in out.splitlines() if line.strip().endswith('.conf')]
+    files = []
+    for line in out.splitlines():
+        if not line.startswith('__AWGCONF__\t'):
+            continue
+        try:
+            _, conf_path, encoded = line.split('\t', 2)
+            conf_text = base64.b64decode(encoded, validate=True).decode('utf-8')
+            files.append((conf_path, conf_text))
+        except (ValueError, UnicodeDecodeError):
+            continue
     imported = updated = skipped = 0
     conn = get_db()
     try:
-        for conf_path in files:
-            rc, conf_text, err = execute_on_server(server_row, 'cat ' + shlex.quote(conf_path), timeout=15)
-            if rc != 0 or not conf_text.strip():
+        for conf_path, conf_text in files:
+            if not conf_text.strip():
                 skipped += 1
                 continue
             parsed = _parse_client_conf_text(conf_text)
@@ -649,13 +670,15 @@ def get_server_awg_fields(server_row: dict) -> dict:
     """Read AWG2 obfuscation parameters from the server interface config."""
     container = server_row.get('amnezia_container') or 'awg-tunnel'
     candidates = [
+        "/opt/amnezia/awg/awg0.conf",
         f"/opt/amnezia/state/{container}/awg0.conf",
         f"/opt/amnezia/state/{container}/awgdir0.conf",
         "/opt/amnezia/state/amnezia-awg2-direct/awgdir0.conf",
         "/opt/amnezia/state/amnezia-awg2/awg0.conf",
         "/data/awg0.conf",
     ]
-    cmd = 'for f in ' + ' '.join(shlex.quote(x) for x in candidates) + '; do [ -f "$f" ] && { cat "$f"; exit 0; }; done; exit 1'
+    inner = 'for f in ' + ' '.join(shlex.quote(x) for x in candidates) + '; do [ -f "$f" ] && { cat "$f"; exit 0; }; done; exit 1'
+    cmd = _docker_exec_shell(container, inner)
     try:
         rc, out, _ = execute_on_server(server_row, cmd, timeout=15)
         if rc == 0 and out:
@@ -697,7 +720,7 @@ def _parse_dump_lines(stdout: str) -> List[Dict]:
     """Парсит текст вывода awg show all dump.
 
     Формат amneziawg-tools (9 полей на строку):
-    awg0\t<pub>\t<psk>\t<endpoint>\t<allowed_ips>\t<transfer_rx>\t<transfer_tx>\t<persistent_keepalive>\t<last_handshake>
+    awg0\t<pub>\t<psk>\t<endpoint>\t<allowed_ips>\t<latest_handshake>\t<transfer_rx>\t<transfer_tx>\t<persistent_keepalive>
     """
     peers_data = []
     lines = stdout.strip().split("\n")
@@ -709,7 +732,7 @@ def _parse_dump_lines(stdout: str) -> List[Dict]:
             continue
         parts = line.split("\t")
         # amneziawg-tools: 9 полей
-        if len(parts) < 9:
+        if len(parts) < 9 or "/" not in parts[4]:
             continue
         try:
             # Первое поле = имя интерфейса (awg0), парсим со второго
@@ -717,11 +740,11 @@ def _parse_dump_lines(stdout: str) -> List[Dict]:
             if len(public_key) < 40 or "(none)" in public_key:
                 continue
             endpoint = parts[3] if parts[3] != "(none)" else ""
-            transfer_rx = int(parts[5]) if parts[5].isdigit() else 0
-            transfer_tx = int(parts[6]) if parts[6].isdigit() else 0
+            transfer_rx = int(parts[6]) if parts[6].isdigit() else 0
+            transfer_tx = int(parts[7]) if parts[7].isdigit() else 0
             last_handshake = 0
             try:
-                v = parts[8]
+                v = parts[5]
                 if v.isdigit():
                     last_handshake = int(v)
             except (ValueError, IndexError):
@@ -1352,7 +1375,8 @@ def list_servers(_: str = Depends(verify_token)):
     rows = conn.execute("SELECT * FROM servers ORDER BY id").fetchall()
     conn.close()
     result = [_server_to_response(r) for r in rows]
-    result.insert(0, _server_to_response(_resolve_server(0)))
+    if SHOW_LOCAL_SERVER:
+        result.insert(0, _server_to_response(_resolve_server(0)))
     return result
 
 @app.post("/api/servers", response_model=ServerResponse)
